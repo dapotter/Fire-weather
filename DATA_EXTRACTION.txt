@@ -1,0 +1,42 @@
+NARR DATA EXTRACTION INSTRUCTIONS:
+
+
+Bash ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Extract all tar files in a directory:
+for file in *.tar; do tar -xvf "$file"; done
+
+Rename all .3D files to have suffix .3D.grib1 for recongition in NCL:
+3D files:   for file in *.3D; do mv "$file" "${file/.3D/.3D.grib1}"; done
+flx files:  for file in *.flx; do mv "$file" "${file/.flx/.flx.grib1}"; done
+pbl files:  for file in *.pbl; do mv "$file" "${file/.pbl/.pbl.grib1}"; done
+sfc files:  for file in *.sfc; do mv "$file" "${file/.sfc/.sfc.grib1}"; done
+
+Doesn't work: Supposed to put all H500 files into one file H500_grb. Instead, it overwrites H500_grb on every loop, and only the last data file gets recorded.
+for file in *_H500.3D; do wgrib -s $file | grep "HGT:500 mb" | wgrib -i -o H500_grb -grib $file; done
+
+
+NCL ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Write files to csv. Run in bash with: 'ncl your_filename.ncl' without quotes:
+ncl ncl_write_csv_2.ncl
+
+Convert .grib1 to .nc file for plotting in matplotlib basemap:
+
+
+wgrib ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Puts all H500 data into its own file
+for file in *.3D; do wgrib -s $file | grep "HGT:500 mb" | wgrib -i -o "${file/.3D/_H500.3D}" -grib $file; done
+
+
+CDO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Convert to netCDF:
+cdo -f nc copy merged_AWIP32.1990030321.3D_H500 merged_AWIP32.1990030321.3D_H500_nc.nc
+for file in *_H500.3D; do cdo -f nc copy "$file" "${file/_H500.3D/_H500.3D_nc.nc}"; done
+
+Flags ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+wgrib flags:
+-s --> short/verbose inventory
+-i --> decode controlled by stdin (inventory list)
+-o --> output file name, 'dump' is default
+
+cdo flags:
+-f --> format of the output file (grb1, grb2, nc1, nc2, nc4, nc4c, nc5, srv, ext, ieg)
