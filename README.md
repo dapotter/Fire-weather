@@ -1,2 +1,2 @@
 # Fire-weather
-Fire weather prediction in OR and WA using synoptic weather variables
+Fire weather prediction in OR and WA state using synoptic weather variables geopotential height at 500 hPa (H500), surface pressure reduced to mean sea level (PMSL), and convective available potential energy (CAPE). Longitude and latitude gradients for both H500 and PMSL are used, not the downloaded point values, as the gradients drive surface level winds leading to high-risk fire conditions. CAPE is added to include the effect of thunderstorm activity which delivers dry electric storms in the summer time, igniting thousands of fires in a few hours and causing the majority of a fire season's burned acreage.
