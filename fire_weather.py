@@ -41,17 +41,17 @@ def import_SYNVAR_csv(lon_min, lon_max, lat_min, lat_max):
     # path_csv_H500 = '/home/dp/Documents/FWP/NARR/csv_H500/'
     path_all_csv = '/home/dp/Documents/FWP/NARR/csv/'
 
-    H500_files = glob.glob(os.path.join(path_all_csv, '*H500.csv'))
+    ''' csv file names must end with either H500.csv, CAPE.csv, or PMSL.csv '''
+    H500_files = glob.glob(os.path.join(path_all_csv, '*H500.csv')) # H500 file paths in a list
     print('H500_files:\n', H500_files)
     CAPE_files = glob.glob(os.path.join(path_all_csv, '*CAPE.csv'))
     PMSL_files = glob.glob(os.path.join(path_all_csv, '*PMSL.csv'))
-    all_files = [H500_files, CAPE_files, PMSL_files]
+    all_files = [H500_files, CAPE_files, PMSL_files]    # All file paths in a list of lists
     print('all_files:\n', all_files)
-    SYNVAR_shortlist = ['H500', 'CAPE', 'PMSL']
+    SYNABBR_shortlist = ['H500', 'CAPE', 'PMSL']
     ''' Creating  '''
     SYNABBR_list = []
     for i,var_list in enumerate(all_files):
-        print('i:\n', i)
         print('var_list:\n', var_list)
         SYNABBR_list.append([SYNABBR_shortlist[i]]*len(var_list))
     print('SYNABBR_list:\n', SYNABBR_list)
@@ -64,52 +64,43 @@ def import_SYNVAR_csv(lon_min, lon_max, lat_min, lat_max):
     i_list = list(range(0,len(all_files)))
     df_all_csv = pd.DataFrame([])
     for i, SYNVAR_files, SYNABBR in zip(i_list, all_files, SYNABBR_shortlist):
-        # Creating a dataframe generator for one type of synoptic variable on each loop through all_files:
-        df_from_each_file = (pd.read_csv(file, header='infer', index_col=['lon', 'lat', 'time']) for file in synvar_files)
+        # When i = 0, all_files = ['/path/to/1_H500.csv', '/path/to/2_H500.csv'], SYNABBR_shortlist='H500'
+        # When i = 1, all_files = ['/path/to/1_CAPE.csv', '/path/to/2_CAPE.csv'], SYNABBR_shortlist='CAPE'
+
+        # Creating a dataframe generator for one type of synoptic variable on each loop through all_files
+        # e.g. When i = 0, df_from_each_file contains all H500 data that concatenates into df
+        df_from_each_file = (pd.read_csv(file, header='infer', index_col=['lon', 'lat', 'time']) for file in SYNVAR_files)
         print('df from each file:\n', df_from_each_file)
         df = pd.concat(df_from_each_file, axis=0)  # 
         print('concatenated df head:\n', df.head)
         print('concatenated df columns:\n', df.columns)
+        # Resetting index, may not be necessary
         df.reset_index(inplace=True)
-        print('df RESET INDEX:\n', df)
-        print('LENGTH of df RESET INDEX DF:\n', len(df[SYNABBR_shortlist[i]]))
+        print('df after reset_index:\n', df)
+        print('Length of df after reset_index:\n', len(df))#[SYNABBR_shortlist[i]]))
         df['time'] = pd.to_datetime(df['time'], format='%m/%d/%Y (%H:%M)')
-        if i == 0:
+        df.set_index(['lon', 'lat', 'time'], inplace=True)
+        df.sort_index(level=2, inplace=True)
+        print('Length of df after reset_index:\n', len(df))
+        if i == 0: # First time through loop, append df to columns
+            # When i = 0, all H500 files in df are processed:
             df_all_csv = df_all_csv.append(df)
-        else:
+            print('11111111111111111111111111111 First df_all_csv concatenation:\n', df_all_csv)
+        else: # Concat df to rows of df_all_csv
             df_all_csv = pd.concat((df_all_csv, df), axis=1, join='inner')
+            print('22222222222222222222222222222 Second df_all_csv concatenation:\n', df_all_csv)
+            print('22222222222222222222222222222 Columns of df_all_csv concatenation:\n', df_all_csv.columns)
+
         arr = df.values
         print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ arr:\n', arr)
+        print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ np.shape(arr):', np.shape(arr))
 
-    df.set_index(['time', 'lon', 'lat'], inplace=True)
-    print('df TIME FORMATTED:\n', df)
-    print('LENGTH of df TIME FORMATTED DF:\n', len(df['CAPE']))
+    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Final df_all_csv:\n', df_all_csv)
+    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Final df_all_csv w/ index:\n', df_all_csv)
+    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Length of final df_all_csv w/index:', len(df_all_csv['CAPE']))
 
-    print('df.loc[[\'1979-01-01 00:00:0.0\']]:\n', df.loc['1979-01-02']) # 00:00:0.0
-
-    # df.index = [df.index.get_level_values(level=0),\
-    #                     df.index.get_level_values(level=1),\
-    #                     pd.to_datetime(df.index.get_level_values(level=2), format='%m/%d/%Y (%H:%M)')]
-
-    # How does this work?: idx = pd.MultiIndex.get_level_values(level=0)
-    #[[pd.to_datetime(df.MultiIndex.level[0]), df.MultiIndex.level[1], df.MultiIndex.level[2]]
-
-    #df.MultiIndex.set_levels(, inplace=True)
-
-    # df['time'] = pd.to_datetime(df['time'], format='%m/%d/%Y (%H:%M)')
-    # t_list = df['time'].values.tolist()
-    # print('t_list before sorting:', t_list)
-    # df.set_index('time', inplace=True)
-    # print('df index:\n', df.index)
-    # df.sort_index(inplace=True)
-    # t_list = df.index.values.tolist()
-    # print('t_list after sorting:', t_list)
-
-    print('df:\n', df)
-
-
-    # t_list = df['time'].values.tolist()
-    # t = [datetime.strptime(i, '%m/%d/%Y (%H:%M)') for i in t_list]
+    print('df_all_csv.loc[index values]:\n', df_all_csv.loc[-131.602, 49.7179, '1979-01-01 00:00:00'])
+    print('df_all_csv.loc[[index values]]:\n', df_all_csv.loc[[-131.602, 49.7179, '1979-01-01 00:00:00']])
 
     # get columns Lat, Lon, Mean Temp, Max Temp, Min temp, Precipitation
     data = df[[]]
