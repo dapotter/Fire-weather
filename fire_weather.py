@@ -31,8 +31,8 @@ import numpy as np
 print(np.__version__)
 
 
-''' ~~~~~~~~~~~~~~~~~~~~~ import_SYNVAR_csv ~~~~~~~~~~~~~~~~~~~~~ '''
-def import_SYNVAR_csv(lon_min, lon_max, lat_min, lat_max):
+''' --- import_SYNVAR_csv --- '''
+def import_csv(lon_min, lon_max, lat_min, lat_max, synvar_str):
     #read in all csvs from folder
     #path = '..\\..\\data\\'
     #path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
@@ -85,19 +85,19 @@ def import_SYNVAR_csv(lon_min, lon_max, lat_min, lat_max):
         if i == 0: # First time through loop, append df to columns
             # When i = 0, all H500 files in df are processed:
             df_all_csv = df_all_csv.append(df)
-            print('11111111111111111111111111111 First df_all_csv concatenation:\n', df_all_csv)
+            print('First df_all_csv concatenation:\n', df_all_csv)
         else: # Concat df to rows of df_all_csv
             df_all_csv = pd.concat((df_all_csv, df), axis=1, join='inner')
-            print('22222222222222222222222222222 Second df_all_csv concatenation:\n', df_all_csv)
-            print('22222222222222222222222222222 Columns of df_all_csv concatenation:\n', df_all_csv.columns)
+            print('Second df_all_csv concatenation:\n', df_all_csv)
+            print('Columns of df_all_csv concatenation:\n', df_all_csv.columns)
 
         arr = df.values
-        print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ arr:\n', arr)
-        print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ np.shape(arr):', np.shape(arr))
+        print(' arr:\n', arr)
+        print('np.shape(arr):', np.shape(arr))
 
-    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Final df_all_csv:\n', df_all_csv)
-    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Final df_all_csv w/ index:\n', df_all_csv)
-    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Length of final df_all_csv w/index:', len(df_all_csv['CAPE']))
+    print('Final df_all_csv:\n', df_all_csv)
+    print('Final df_all_csv w/ index:\n', df_all_csv)
+    print('Length of final df_all_csv w/index:', len(df_all_csv['CAPE']))
 
     print('df_all_csv.loc[index values]:\n', df_all_csv.loc[-131.602, 49.7179, '1979-01-01 00:00:00'])
     print('df_all_csv.loc[[index values]]:\n', df_all_csv.loc[[-131.602, 49.7179, '1979-01-01 00:00:00']])
@@ -107,318 +107,363 @@ def import_SYNVAR_csv(lon_min, lon_max, lat_min, lat_max):
     data = data.apply(pd.to_numeric,  errors='coerce') # Converting to floats
     data = data.dropna(how='any')
     #names = ['Latitude', 'Longitude', 'Monthly Median temperature (C)', 'Monthly Max temperature (C)', 'Monthly Min temperature (C)', 'Monthly total precipitation (mm)']
-    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ data.head():\n', data.head())
+    print('data.head():\n', data.head())
     
-
-    '''
-    SYNVAR = syn_var_str
-    print('SYNVAR: ', SYNVAR)
-    #df = df[['time','lon','lat','H500']]
-    df = df[['time','lon','lat',SYNVAR]]
-    cols = df.columns
-    '''
+    # Pickle out:
+    df_all_csv_pkl = df_all_csv.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_csv.pkl')
 
 
-    # Shouldn't need this conversion: dt_list = pd.to_datetime(t)
-    #print('t datetime formatted:\n', t)
+    '''--- Plots a select synoptic variable from df_all_csv ---'''
+
+    # Checking index referencing:
+    print('type(df.index.get_level_values(0)):\n', type(df.index.get_level_values(0)))  # Referencing lon type
+    print('df.index.get_level_values(0)[0]:\n', df.index.get_level_values(0)[0])        # Referencing lon index values
+    print('type(df.index.get_level_values(1)):\n', type(df.index.get_level_values(1)))  # Referencing lat type
+    print('df.index.get_level_values(1)[0]:\n', df.index.get_level_values(1)[0])        # Referencing lat index values
+    print('type(df.index.get_level_values(2)):\n', type(df.index.get_level_values(2)))  # Referencing time type
+    print('df.index.get_level_values(2)[0]:\n', df.index.get_level_values(2)[0])        # Referencing time index values
+
+    for SYNVAR in SYNABBR_shortlist:
+        print('Now processing SYNVAR:', SYNVAR)
+        x = df_all_csv.index.get_level_values(0).tolist()
+        y = df_all_csv.index.get_level_values(1).tolist()
+        t = df_all_csv.index.get_level_values(2).tolist()
+        z = df_all_csv[SYNVAR].values.tolist()
+        d = [i for i in zip(t,x,y,z)]
+        df = pd.DataFrame(data=d, columns=['time','lon','lat',SYNVAR])
+
+        df.set_index('time', inplace=True)
+        print('df.index:\n', df.index)
+        print('df.index[10]:\n', df.index[10])
+        
+
+        ''' --- SYNVAR Tripcolor & Tricontourf: Unevenly spaced grid --- '''
+
+        # Looking at content of df index values:
+        df2 = df[(df.index == datetime(1979,1,1,0,0,0))]#.values.tolist()
+        df3 = df[(df.index == datetime(1979,1,1,3,0,0))]#.values.tolist()
+        print('df2:\n', df2)
+        print('df3:\n', df3)
+
+        x_t0 = df2['lon'].values.tolist()
+        y_t0 = df2['lat'].values.tolist()
+        z_t0 = df2[SYNVAR].values.tolist()
+        print('Shape x_t0:\n', np.shape(x_t0))
+        print('Shape y_t0:\n', np.shape(y_t0))
+        print('Shape z_t0:\n', np.shape(z_t0))
+
+        #df_list = list(df.groupby('time'))
+        #print('df_list:\n', df_list)
+        SYNVAR_3d = np.array(list(df.groupby('time').apply(pd.DataFrame.to_numpy))) # For some reason to_numpy can be called without () and it works. Why is this allowed?
+        print('-------------------------------------------')
+        print('SYNVAR_3d[0][10][2]:\n', SYNVAR_3d[0][10][2])
+        print('SYNVAR_3d[0,:,:]:\n', SYNVAR_3d[0,:,:])
+        print('SYNVAR_3d:\n', SYNVAR_3d)
+        SYNVAR_3d_shape = np.shape(SYNVAR_3d)
+        print('SYNVAR_3d shape:\n', SYNVAR_3d_shape)
+        m,n,r = SYNVAR_3d.shape
+        out_arr = np.column_stack((np.repeat(np.arange(m),n),SYNVAR_3d.reshape(m*n,-1)))
+        out_df = pd.DataFrame(out_arr)
+        #out_df.columns = SYNABBR_shortlist
+        print('out_arr:\n', out_arr)
+        print('out_df:\n', out_df)
+        our_arr_with_time = np.column_stack((out_arr,t))
+        print('our_arr_with_time:\n', our_arr_with_time)
+
+
+        num_datetimes = SYNVAR_3d_shape[0]  # Used to specify number of layers in Z and Zi
+        
+        f, ax = plt.subplots(1,2, sharex=True, sharey=True)
+        ax[0].tripcolor(x,y,z)
+        ax[1].tricontourf(x_t0,y_t0,z_t0,20)#, cmap=cm.jet) # 20 contour levels is good quality
+
+        ax[0].plot(x,y, 'ko ', markersize=1)
+        ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+        ax[1].plot(x_t0,y_t0, 'ko ', markersize=1)
+        ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+
+    ##   plt.savefig('SYNVAR_OR_WA_pyplot.png')
+        plt.show()
+        
+        ''' --- SYNVAR surf plot w/ evenly spaced grid - not working --- '''
+        npts = 200
+        N = 200
+
+        # --- Interpolation on a grid:
+        # A contour plot of irregularly spaced data coordinates
+        # via interpolation on a grid.
+
+        # Create grid values first.
+        xi = np.linspace(lon_min, lon_max, N) #-126, -115
+        yi = np.linspace(lat_min, lat_max, N) # 40, 51
+
+        # Perform linear interpolation of the data (x,y)
+        # on a grid defined by (xi,yi)
+    ##    triang = tri.Triangulation(x, y)
+    ##    interpolator = tri.LinearTriInterpolator(triang, z)
+        Xi, Yi = np.meshgrid(xi, yi)
+    ##    zi = interpolator(Xi, Yi)
+
+        ''' Convert to a regular grid '''
+        Zi = griddata((x_t0, y_t0), z_t0, (Xi,Yi), method='linear') #(xi[None,:], yi[:,None]), method='linear', fill_value=0)
+        Z_grad_x = np.gradient(Zi, axis=1)
+        Z_grad_y = np.gradient(Zi, axis=0)
+
+        # print('xi:\n', xi)
+        # print('yi:\n', yi)
+        # print('Xi:\n', Xi)
+        # print('Yi:\n', Yi)
+        # print('zi:\n', Zi)
+        
+    ##    fig, (ax1, ax2) = plt.subplots(nrows=2)
+    ##    ax1.contour(Xi, Yi, zi, levels=14, linewidths=0.5, colors='k')
+    ##    cntr1 = ax1.contourf(Xi, Yi, zi, levels=14, cmap="RdBu_r")
+    ##
+    ##    fig.colorbar(cntr1, ax=ax1)
+    ##    ax1.plot(x, y, 'ko', ms=3)
+    ##    ax1.axis((-2, 2, -2, 2))
+    ##    ax1.set_title('grid and contour (%d points, %d grid points)' %
+    ##                  (npts, ngridx * ngridy))
+    ##
+    ##    plt.subplots_adjust(hspace=0.5)
+    ##    plt.show()
+
+        ''' --- SYNVAR Surface plot --- '''
+        X = Xi
+        Y = Yi
+        Z = Zi
+
+        Z_flat = np.ravel(Z)
+        Z_min = np.nanmin(Z_flat)
+        Z_max = np.nanmax(Z_flat)
+
+        Z_grad_x_flat = np.ravel(Z_grad_x)
+        Z_grad_x_min = np.nanmin(Z_grad_x_flat)
+        Z_grad_x_max = np.nanmax(Z_grad_x_flat)
+
+        Z_grad_y_flat = np.ravel(Z_grad_y)
+        Z_grad_y_min = np.nanmin(Z_grad_y_flat)
+        Z_grad_y_max = np.nanmax(Z_grad_y_flat)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(131, projection='3d')
+        ax.set_zlim(Z_min, Z_max)
+        surf = ax.plot_surface(X,Y,Z, cmap=cm.jet, vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=False)
+        ax.set_zlim(np.nanmin(Z_flat), np.nanmax(Z_flat))
+        ax.zaxis.set_major_locator(LinearLocator(6))
+        ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
+
+        ax = fig.add_subplot(132, projection='3d')
+        ax.set_zlim(Z_grad_x_min, Z_grad_x_max)
+        surf = ax.plot_surface(X,Y,Z_grad_x, cmap=cm.jet, vmin=Z_grad_x_min, vmax=Z_grad_x_max, linewidth=0, antialiased=False)
+        ax.set_zlim(np.nanmin(Z_grad_x_flat), np.nanmax(Z_grad_x_flat))
+        ax.zaxis.set_major_locator(LinearLocator(6))
+        ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
+
+        ax = fig.add_subplot(133, projection='3d')
+        ax.set_zlim(Z_grad_y_min, Z_grad_y_max)
+        surf = ax.plot_surface(X,Y,Z_grad_y, cmap=cm.jet, vmin=Z_grad_y_min, vmax=Z_grad_y_max, linewidth=0, antialiased=False)
+        ax.set_zlim(np.nanmin(Z_grad_y_flat), np.nanmax(Z_grad_y_flat))
+        ax.zaxis.set_major_locator(LinearLocator(6))
+        ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
+
+        ax.set_xlabel('Longitude')
+        ax.set_ylabel('Latitude')
+        ax.set_zlabel(SYNVAR)
+        # Color bar which maps values to colors:
+        fig.colorbar(surf, shrink=0.5, aspect=5)
+        plt.show()
+        
+        
+        ''' --- Example 3D Animation --- '''
+        ''' Uncomment to run '''
+        # def update_plot(frame_number, zarray, plot):
+        #     plot[0].remove()
+        #     plot[0] = ax.plot_surface(x, y, zarray[:,:,frame_number], cmap="magma")
+
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+
+        # N = 100
+        # nmax = 20
+        # x = np.linspace(-4,4,N+1)           # [-4, -3.428, -2.857, ..., 2.857, 3.428, 4]
+        # x, y = np.meshgrid(x, x)            # Make x list into a mesh
+        # print('x:\n', x)
+        # print('y:\n', y)
+        # print('(x,y):\n', (x,y))
+        # print('x shape:\n', np.shape(x))
+        # print('y shape:\n', np.shape(y))
+        # print('(x,y) shape:\n', np.shape((x,y)))
+        # zarray = np.zeros((N+1, N+1, nmax)) # Z values set to zero, filled below
+        # print('zarray shape:\n', np.shape(zarray))
+
+        # f = lambda x,y,sig : 1/np.sqrt(sig)*np.exp(-(x**2+y**2)/sig**2)
+
+        # for i in range(nmax):
+        #     zarray[:,:,i] = f(x,y,1.5+np.sin(i*2*np.pi/nmax))
+
+        # plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
+        # ax.set_zlim(0,1.5)
+        # animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=40, fargs=(zarray, plot))
+        # plt.show()
+        
+        
+        ''' --- Animation: SYNVAR and SYNVAR gradient --- '''
+        def update_plot(frame_number, Zi_grad_x, plot):
+            plot[0].remove()
+            plot[0] = ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,frame_number], cmap="magma")
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        N = 200       # x and y grid number of points. 100 x 100 = 10,000 grid points
+        nmax = num_datetimes     # number of z matrices (e.g. frames or unique datetime objects)
+        
+        xi = np.linspace(lon_min, lon_max, N)       # -126, -115
+        yi = np.linspace(lat_min, lat_max, N)       # 40, 51
+        Xi, Yi = np.meshgrid(xi, yi)                # Xi, Yi meshgrid
+        Xi_Yi = np.c_[Xi,Yi]
+        print('(Xi,Yi):\n', (Xi,Yi))
+        print('Xi_Yi:\n', Xi_Yi)
+
+
+        ''' Step through list of variables in df and display each.
+            Also calculating gradients for H500 and PMSL and creating
+            dataframe to house these variables '''
     
-    ''' Referencing specific index values in df: '''
-    print('type(df.index.get_level_values(0)):\n', type(df.index.get_level_values(0)))  # Referencing time type
-    print('df.index.get_level_values(0)[0]:\n', df.index.get_level_values(0)[0])        # Referencing time index values
-    print('type(df.index.get_level_values(1)):\n', type(df.index.get_level_values(1)))  # Referencing lon type
-    print('df.index.get_level_values(1)[0]:\n', df.index.get_level_values(1)[0])        # Referencing lon index values
-    print('type(df.index.get_level_values(2)):\n', type(df.index.get_level_values(2)))  # Referencing lon type
-    print('df.index.get_level_values(2)[0]:\n', df.index.get_level_values(2)[0])        # Referencing lon index values
+        Zi = np.zeros((N, N, nmax))                 # zi values set to zero, filled below
+        Zi_grad_unknown = np.zeros((N, N, nmax))          # zi values set to zero, filled below
+        Zi_grad_x = np.zeros((N, N, nmax))          # zi values set to zero, filled below
+        Zi_grad_y = np.zeros((N, N, nmax))          # zi values set to zero, filled below
+
+        # iterate through every x,y grid, differs for every datetime stamp
+        
+        z_min_list = []; z_max_list = []
+        layers, row, cols = np.shape(SYNVAR_3d)
+
+        for j in range(0,layers): # Step through Zi-layers
+            # SYNVAR_3d[datetime:row:column]
+            # jth time point
+            # all rows within jth timepoint
+            # 0th, 1st, or 2nd 
+            xt = SYNVAR_3d[j,:,0]
+            yt = SYNVAR_3d[j,:,1]
+            zt = SYNVAR_3d[j,:,2]
+            #print('zt for layer {}:\n'.format(j, zt))
+            #xt = df_t['lon'].values.tolist()
+            #yt = df_t['lat'].values.tolist()
+            #zt = df_t[SYNVAR].values.tolist()
+            # (xt, yt) is 1122 x 2
+            # zt is 1122
+            # (Xi, Yi) is N x N = 100 x 100
+            xt_yt = np.c_[xt,yt]
+            Zi[:,:,j] = griddata((xt,yt), zt, (Xi,Yi), method='linear') # Converts z data to a regular grid
+            z_min_list.append(np.nanmin(Zi[:,:,j]))
+            z_max_list.append(np.nanmax(Zi[:,:,j]))
+            # print('np.gradient(Zi[:,:,j])[0]:\n', np.gradient(Zi[:,:,j])[0])
+            #Zi_grad_unknown[:,:,j] = np.gradient(Zi[:,:,j])[0]
+            Zi_grad_x[:,:,j] = np.gradient(Zi[:,:,j], axis=1)
+            Zi_grad_y[:,:,j] = np.gradient(Zi[:,:,j], axis=0)
+
+            print('---------------------- nan min Zi[:,:,j]):\n', np.nanmin(Zi[:,:,j]))
+            #print('Xi[0,:,j]:\n', Xi[0,:])
+            #print('Yi[0,:,j]:\n', Yi[0,:])
+            print('Zi[:,:,j]:\n', Zi[:,:,j])
 
 
-    SYNVAR = 'PMSL'
-    t = df.index.get_level_values(0).tolist()
-    x = df.index.get_level_values(1).tolist()
-    y = df.index.get_level_values(2).tolist()
-    z = df[SYNVAR].values.tolist()
-    d = [i for i in zip(t,x,y,z)]
-    df = pd.DataFrame(data=d, columns=['time','lon','lat',SYNVAR])#cols)
+        print('Zi[:,:,0]:\n', Zi[:,:,0])
+        print('Zi_grad_unknown[:,:,0]:\n', Zi_grad_unknown[:,:,0])
+        print('Zi_grad_x[:,:,0]:\n', Zi_grad_x[:,:,0])
+        print('Zi_grad_y[:,:,0]:\n', Zi_grad_y[:,:,0])
+        print('-----------------------------------\n')
 
-    df.set_index('time', inplace=True)
-    #print('df.index:\n', df.index)
-    #print('df.index[10]:\n', df.index[10])
-    
-    ''' ~~~~~~~~~~~~~~~  SYNVAR Tripcolor & Tricontourf: Unevenly spaced grid  ~~~~~~~~~~~~~~ '''
+        print('np.nanmin(z_min_list):', np.nanmin(z_min_list))
+        print('np.nanmax(z_max_list):', np.nanmax(z_max_list))
 
-    # Looking at content of df index values:
-    df2 = df[(df.index == datetime(1979,1,1,0,0,0))]#.values.tolist()
-    df3 = df[(df.index == datetime(1979,1,1,3,0,0))]#.values.tolist()
-    print('df2:\n', df2)
-    print('df3:\n', df3)
+        print('np.nanmin(Zi):', np.nanmin(Zi))
+        print('np.nanmax(Zi):', np.nanmax(Zi))
 
-    x_t0 = df2['lon'].values.tolist()
-    y_t0 = df2['lat'].values.tolist()
-    z_t0 = df2[SYNVAR].values.tolist()
-    print('Shape x_t0:\n', np.shape(x_t0))
-    print('Shape y_t0:\n', np.shape(y_t0))
-    print('Shape z_t0:\n', np.shape(z_t0))
+        print('Zi all-layers min:', np.nanmin(Zi[:,:,:]))
+        print('Zi all-layers max:', np.nanmax(Zi[:,:,:]))
 
-    #df_list = list(df.groupby('time'))
-    #print('df_list:\n', df_list)
-    SYNVAR_3d = np.array(list(df.groupby('time').apply(pd.DataFrame.to_numpy))) # For some reason to_numpy can be called without () and it works. Why is this allowed?
-    print('SYNVAR_3d[0][10][2]:\n', SYNVAR_3d[0][10][2])
-    #print('SYNVAR_3d[0,:,:]:\n', SYNVAR_3d[0,:,:])
-    #print('SYNVAR_3d:\n', SYNVAR_3d)
-    print('SYNVAR_3d shape:\n', np.shape(SYNVAR_3d))
-    
-    f, ax = plt.subplots(1,2, sharex=True, sharey=True)
-    ax[0].tripcolor(x,y,z)
-    ax[1].tricontourf(x_t0,y_t0,z_t0,20)#, cmap=cm.jet) # 20 contour levels is good quality
+        print('(xt,yt) shape:', np.shape((xt,yt)))
+        print('xt_yt shape:', np.shape(xt_yt))
+        print('zt shape:', np.shape(zt))
+        m,n,r = np.shape(Zi)
+        Xi_shape = np.shape(Xi)
+        Yi_shape = np.shape(Yi)
+        print('Xi shape:', np.shape(Xi))
+        print('Yi shape:', np.shape(Yi))
+        print('(Xi,Yi) shape:', np.shape((Xi,Yi)))
+        print('Zi shape:', np.shape(Zi))
+        print('Zi[:,:,10] shape:\n', np.shape(Zi[:,:,10]))
+        t_unique = np.unique(t)
+        print('t_unique:\n', t_unique)
+        num_unique_times = len(t_unique)
+        print('num_unique_times:', num_unique_times)
+        t_unique_exp = np.repeat(t_unique, m*n)
+        print('t_unique_exp:\n', t_unique_exp)
+        print('t_unique_exp shape:', np.shape(t_unique_exp))
 
-    ax[0].plot(x,y, 'ko ', markersize=1)
-    ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
-    ax[1].plot(x_t0,y_t0, 'ko ', markersize=1)
-    ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+        Xi_flat = np.ravel(Xi)
+        Xi_tiled = np.tile(Xi, num_unique_times)
+        Xi_tiled_flat = np.ravel(Xi_tiled)
+        Yi_flat = np.ravel(Yi)
+        Yi_tiled = np.tile(Yi, num_unique_times)
+        Yi_tiled_flat = np.ravel(Yi_tiled)
+        Zi_flat = np.ravel(Zi)
+        print('Xi_tiled:', Xi_tiled_flat)
+        print('Yi_tiled:', Yi_tiled_flat)
+        print('Zi_flat:', Zi_flat)
 
-##   plt.savefig('SYNVAR_OR_WA_pyplot.png')
-    plt.show()
-    
-    ''' ~~~~~~~~~~~~~~~  SYNVAR Surface Plot: Evenly spaced grid - DOESN'T WORK  ~~~~~~~~~~~~~~ '''
-    npts = 200
-    N = 200
+        arr = np.column_stack((Xi_tiled_flat, Yi_tiled_flat, t_unique_exp, Zi_flat))
+        df_all_csv_interpolated = pd.DataFrame(data=arr, columns=['lon','lat','time',SYNABBR])
+        print('df_all_csv_interpolated:\n', df_all_csv_interpolated)
 
-    # -----------------------
-    # Interpolation on a grid
-    # -----------------------
-    # A contour plot of irregularly spaced data coordinates
-    # via interpolation on a grid.
+        #Z_flat = np.ravel(zi)
+        Z_min = int(np.nanmin(Zi_grad_x[:,:,:])) # Used to set 3D animation vertical range
+        Z_max = int(np.nanmax(Zi_grad_x[:,:,:])) # Used to set 3D animation vertical range
+        
+        #plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
+        plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=False, color='0.75', rstride=1, cstride=1)]
 
-    # Create grid values first.
-    xi = np.linspace(lon_min, lon_max, N) #-126, -115
-    yi = np.linspace(lat_min, lat_max, N) # 40, 51
+        ax.set_zlim(Z_min, Z_max)
+        ax.zaxis.set_major_locator(LinearLocator(6))
+        ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
+        ax.set_xlabel('Longitude')
+        ax.set_ylabel('Latitude')
+        ax.set_zlabel(SYNVAR+': x gradient')
+        # Color bar which maps values to colors:
+        #fig.colorbar(surf, shrink=0.5, aspect=5)
+        # NEED THIS BUT NOT WORKING: fig.colorbar(plot, shrink=0.5, aspect=5)
+        
+        # Set animation figure parameters
+        fig.set_size_inches(2, 2, True) # width (inches), height (inches), forward = True or False
+        dpi = 300
+        # Animation.FuncAnimation(figure reference, function that updates plot, time interval between frames in milliseconds, (data, plot reference))
+        animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=200, fargs=(Zi_grad_x, plot))
+        
+        '''--- Save Animation as mp4:'''
+        plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
+        writer = Animation.FFMpegWriter(fps=3, codec='libx264', bitrate=1800)
+        filename = SYNVAR + '_Jan_1_to_14_1979.mp4'
+        animate.save(filename=filename, writer=writer, dpi=dpi)
+        ''' ----------------------------------------------- '''
 
-    # Perform linear interpolation of the data (x,y)
-    # on a grid defined by (xi,yi)
-##    triang = tri.Triangulation(x, y)
-##    interpolator = tri.LinearTriInterpolator(triang, z)
-    Xi, Yi = np.meshgrid(xi, yi)
-##    zi = interpolator(Xi, Yi)
+        plt.show() # Animation is saved by the time it shows up.
 
-    ''' Convert to a regular grid '''
-    Zi = griddata((x_t0, y_t0), z_t0, (Xi,Yi), method='linear') #(xi[None,:], yi[:,None]), method='linear', fill_value=0)
-    Z_grad_x = np.gradient(Zi, axis=1)
-    Z_grad_y = np.gradient(Zi, axis=0)
+    return df_all_csv, SYNVAR_3d, df, t, x, y, z
 
-    # print('xi:\n', xi)
-    # print('yi:\n', yi)
-    # print('Xi:\n', Xi)
-    # print('Yi:\n', Yi)
-    # print('zi:\n', Zi)
-    
-##    fig, (ax1, ax2) = plt.subplots(nrows=2)
-##    ax1.contour(Xi, Yi, zi, levels=14, linewidths=0.5, colors='k')
-##    cntr1 = ax1.contourf(Xi, Yi, zi, levels=14, cmap="RdBu_r")
-##
-##    fig.colorbar(cntr1, ax=ax1)
-##    ax1.plot(x, y, 'ko', ms=3)
-##    ax1.axis((-2, 2, -2, 2))
-##    ax1.set_title('grid and contour (%d points, %d grid points)' %
-##                  (npts, ngridx * ngridy))
-##
-##    plt.subplots_adjust(hspace=0.5)
-##    plt.show()
 
-    ''' ~~~~~~~~~~~~~~~~~~~ SYNVAR Surface plot ~~~~~~~~~~~~~~~~~~~ '''
-    X = Xi
-    Y = Yi
-    Z = Zi
 
-    Z_flat = np.ravel(Z)
-    Z_min = np.nanmin(Z_flat)
-    Z_max = np.nanmax(Z_flat)
 
-    Z_grad_x_flat = np.ravel(Z_grad_x)
-    Z_grad_x_min = np.nanmin(Z_grad_x_flat)
-    Z_grad_x_max = np.nanmax(Z_grad_x_flat)
+''' --- Run import_csv, synvar_plot --- '''
+df_all_csv, SYNVAR_3d, df, t, x, y, z = import_csv(-125,-116,41,50,'PMSL')
+''' ----------------------------------- '''
 
-    Z_grad_y_flat = np.ravel(Z_grad_y)
-    Z_grad_y_min = np.nanmin(Z_grad_y_flat)
-    Z_grad_y_max = np.nanmax(Z_grad_y_flat)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(131, projection='3d')
-    ax.set_zlim(Z_min, Z_max)
-    surf = ax.plot_surface(X,Y,Z, cmap=cm.jet, vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=False)
-    ax.set_zlim(np.nanmin(Z_flat), np.nanmax(Z_flat))
-    ax.zaxis.set_major_locator(LinearLocator(6))
-    ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
 
-    ax = fig.add_subplot(132, projection='3d')
-    ax.set_zlim(Z_grad_x_min, Z_grad_x_max)
-    surf = ax.plot_surface(X,Y,Z_grad_x, cmap=cm.jet, vmin=Z_grad_x_min, vmax=Z_grad_x_max, linewidth=0, antialiased=False)
-    ax.set_zlim(np.nanmin(Z_grad_x_flat), np.nanmax(Z_grad_x_flat))
-    ax.zaxis.set_major_locator(LinearLocator(6))
-    ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
 
-    ax = fig.add_subplot(133, projection='3d')
-    ax.set_zlim(Z_grad_y_min, Z_grad_y_max)
-    surf = ax.plot_surface(X,Y,Z_grad_y, cmap=cm.jet, vmin=Z_grad_y_min, vmax=Z_grad_y_max, linewidth=0, antialiased=False)
-    ax.set_zlim(np.nanmin(Z_grad_y_flat), np.nanmax(Z_grad_y_flat))
-    ax.zaxis.set_major_locator(LinearLocator(6))
-    ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
-
-    ax.set_xlabel('Longitude')
-    ax.set_ylabel('Latitude')
-    ax.set_zlabel(SYNVAR)
-    # Color bar which maps values to colors:
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    plt.show()
-    ''' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ '''
-    
-    
-    ''' ~~~~~~~~~~~~~~~~~~~~~~~~~ Example 3D Animation ~~~~~~~~~~~~~~~~~~~~~~~ '''
-    def update_plot(frame_number, zarray, plot):
-        plot[0].remove()
-        plot[0] = ax.plot_surface(x, y, zarray[:,:,frame_number], cmap="magma")
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    N = 100
-    nmax = 20
-    x = np.linspace(-4,4,N+1)           # [-4, -3.428, -2.857, ..., 2.857, 3.428, 4]
-    x, y = np.meshgrid(x, x)            # Make x list into a mesh
-    print('x:\n', x)
-    print('y:\n', y)
-    print('(x,y):\n', (x,y))
-    print('x shape:\n', np.shape(x))
-    print('y shape:\n', np.shape(y))
-    print('(x,y) shape:\n', np.shape((x,y)))
-    zarray = np.zeros((N+1, N+1, nmax)) # Z values set to zero, filled below
-    print('zarray shape:\n', np.shape(zarray))
-
-    f = lambda x,y,sig : 1/np.sqrt(sig)*np.exp(-(x**2+y**2)/sig**2)
-
-    for i in range(nmax):
-        zarray[:,:,i] = f(x,y,1.5+np.sin(i*2*np.pi/nmax))
-
-    plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
-    ax.set_zlim(0,1.5)
-    animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=40, fargs=(zarray, plot))
-    plt.show()
-    ''' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ''' 
-    
-    
-    ''' ~~~~~~~~~~~~ Animation: SYNVAR and SYNVAR Gradient ~~~~~~~~~~~~ '''
-    def update_plot(frame_number, Zi_grad_x, plot):
-        plot[0].remove()
-        plot[0] = ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,frame_number], cmap="magma")
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    N = 200       # x and y grid number of points. 100 x 100 = 10,000 grid points
-    nmax = 17     # number of z matrices (e.g. frames or unique datetime objects)
-    
-    xi = np.linspace(lon_min, lon_max, N)       # -126, -115
-    yi = np.linspace(lat_min, lat_max, N)       # 40, 51
-    Xi, Yi = np.meshgrid(xi, yi)                # Xi, Yi meshgrid
-    Xi_Yi = np.c_[Xi,Yi]
-    print('(Xi,Yi):\n', (Xi,Yi))
-    print('Xi_Yi:\n', Xi_Yi)
-    Zi = np.zeros((N, N, nmax))                 # zi values set to zero, filled below
-    Zi_grad_unknown = np.zeros((N, N, nmax))          # zi values set to zero, filled below
-    Zi_grad_x = np.zeros((N, N, nmax))          # zi values set to zero, filled below
-    Zi_grad_y = np.zeros((N, N, nmax))          # zi values set to zero, filled below
-
-    # iterate through every x,y grid, differs for every datetime stamp
-    
-    z_min_list = []; z_max_list = []
-    layers, row, cols = np.shape(SYNVAR_3d)
-    for j in range(0,layers):
-        xt = SYNVAR_3d[j,:,0]
-        yt = SYNVAR_3d[j,:,1]
-        zt = SYNVAR_3d[j,:,2]
-        #print('zt for layer {}:\n'.format(j, zt))
-        #xt = df_t['lon'].values.tolist()
-        #yt = df_t['lat'].values.tolist()
-        #zt = df_t[SYNVAR].values.tolist()
-        # (xt, yt) is 1122 x 2
-        # zt is 1122
-        # (Xi, Yi) is N x N = 100 x 100
-        xt_yt = np.c_[xt,yt]
-        Zi[:,:,j] = griddata((xt,yt), zt, (Xi,Yi), method='linear') # Converts z data to a regular grid
-        z_min_list.append(np.nanmin(Zi[:,:,j]))
-        z_max_list.append(np.nanmax(Zi[:,:,j]))
-        # print('np.gradient(Zi[:,:,j])[0]:\n', np.gradient(Zi[:,:,j])[0])
-        #Zi_grad_unknown[:,:,j] = np.gradient(Zi[:,:,j])[0]
-        Zi_grad_x[:,:,j] = np.gradient(Zi[:,:,j], axis=1)
-        Zi_grad_y[:,:,j] = np.gradient(Zi[:,:,j], axis=0)
-
-        print('~~~~~~~~~~~~~~~~~ nan min Zi[:,:,j]):\n', np.nanmin(Zi[:,:,j]))
-        #print('Xi[0,:,j]:\n', Xi[0,:])
-        #print('Yi[0,:,j]:\n', Yi[0,:])
-        print('Zi[:,:,j]:\n', Zi[:,:,j])
-
-    print('Zi[:,:,0]:\n', Zi[:,:,0])
-    print('Zi_grad_unknown[:,:,0]:\n', Zi_grad_unknown[:,:,0])
-    print('Zi_grad_x[:,:,0]:\n', Zi_grad_x[:,:,0])
-    print('Zi_grad_y[:,:,0]:\n', Zi_grad_y[:,:,0])
-    print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
-
-    print('np.nanmin(z_min_list):', np.nanmin(z_min_list))
-    print('np.nanmax(z_max_list):', np.nanmax(z_max_list))
-
-    print('np.nanmin(Zi):', np.nanmin(Zi))
-    print('np.nanmax(Zi):', np.nanmax(Zi))
-
-    print('Zi all-layers min:', np.nanmin(Zi[:,:,j]))
-    print('Zi all-layers max:', np.nanmax(Zi[:,:,j]))
-
-    print('(xt,yt) shape:', np.shape((xt,yt)))
-    print('xt_yt shape:', np.shape(xt_yt))
-    print('zt shape:', np.shape(zt))
-    print('Xi shape:', np.shape(Xi))
-    print('Yi shape:', np.shape(Yi))
-    print('(Xi,Yi) shape:', np.shape((Xi,Yi)))
-    print('Zi shape:', np.shape(Zi))
-    print('Zi[:,:,10] shape:\n', np.shape(Zi[:,:,10]))
-
-    #Z_flat = np.ravel(zi)
-    Z_min = np.nanmin(Zi_grad_x[:,:,j]) # Used to set 3D animation vertical range
-    Z_max = np.nanmax(Zi_grad_x[:,:,j]) # Used to set 3D animation vertical range
-    
-    #plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
-    plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=False, color='0.75', rstride=1, cstride=1)]
-
-    ax.set_zlim(Z_min, Z_max)
-    ax.zaxis.set_major_locator(LinearLocator(6))
-    ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
-    ax.set_xlabel('Longitude')
-    ax.set_ylabel('Latitude')
-    ax.set_zlabel(SYNVAR+' x gradient')
-    # Color bar which maps values to colors:
-    #fig.colorbar(surf, shrink=0.5, aspect=5)
-    # NEED THIS BUT NOT WORKING: fig.colorbar(plot, shrink=0.5, aspect=5)
-    
-    # Set animation figure parameters
-    fig.set_size_inches(2, 2, True) # width (inches), height (inches), forward = True or False
-    dpi = 300
-    # Animation.FuncAnimation(figure reference, function that updates plot, time interval between frames in milliseconds, (data, plot reference))
-    animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=200, fargs=(Zi_grad_x, plot))
-    
-    '''--- Save Animation as mp4:'''
-    plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
-    writer = Animation.FFMpegWriter(fps=3, codec='libx264', bitrate=1800)
-    filename = SYNVAR + '_Jan_1_to_3_1979.mp4'
-    animate.save(filename=filename, writer=writer, dpi=dpi)
-    ''' ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ '''
-
-    plt.show() # Animation is saved by the time it shows up.
-
-    if syn_var_str == 'H500':
-        SYNVAR_3d
-
-    return SYNVAR_3d, df, t, x, y, z
-
-''' ~~~~~~~~~~~~~~~~~~~~~ Run import_SYNVAR_csv ~~~~~~~~~~~~~~~~~~~~~ '''
-SYNVAR_3d, df, t, x, y, z = import_SYNVAR_csv(-125,-116,41,50)
-#                                        (csv filename, synoptic weather variable name, longitude min, longitude max, latitude min, latitude max)
 
 
 
