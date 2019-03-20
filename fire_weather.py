@@ -32,7 +32,7 @@ print(np.__version__)
 
 
 ''' --- import_SYNVAR_csv --- '''
-def import_csv(lon_min, lon_max, lat_min, lat_max, synvar_str):
+def import_csv(lon_min, lon_max, lat_min, lat_max):
     #read in all csvs from folder
     #path = '..\\..\\data\\'
     #path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
@@ -71,7 +71,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max, synvar_str):
         # e.g. When i = 0, df_from_each_file contains all H500 data that concatenates into df
         df_from_each_file = (pd.read_csv(file, header='infer', index_col=['lon', 'lat', 'time']) for file in SYNVAR_files)
         print('df from each file:\n', df_from_each_file)
-        df = pd.concat(df_from_each_file, axis=0)  # 
+        df = pd.concat(df_from_each_file, axis=0)
         print('concatenated df head:\n', df.head)
         print('concatenated df columns:\n', df.columns)
         # Resetting index, may not be necessary
@@ -123,13 +123,21 @@ def import_csv(lon_min, lon_max, lat_min, lat_max, synvar_str):
     print('type(df.index.get_level_values(2)):\n', type(df.index.get_level_values(2)))  # Referencing time type
     print('df.index.get_level_values(2)[0]:\n', df.index.get_level_values(2)[0])        # Referencing time index values
 
-    for SYNVAR in SYNABBR_shortlist:
-        print('Now processing SYNVAR:', SYNVAR)
-        x = df_all_csv.index.get_level_values(0).tolist()
-        y = df_all_csv.index.get_level_values(1).tolist()
-        t = df_all_csv.index.get_level_values(2).tolist()
+    x = df_all_csv.index.get_level_values(0).tolist()
+    y = df_all_csv.index.get_level_values(1).tolist()
+    t = df_all_csv.index.get_level_values(2).tolist()
+    # print('x values from df_all_csv index level 0:\n', x)
+    # print('y values from df_all_csv index level 1:\n', y)
+    # print('t values from df_all_csv index level 2:\n', t)
+    
+    df_all_synvar_grid_interp = pd.DataFrame([])
+    for i, SYNVAR in enumerate(SYNABBR_shortlist):
+        print('Now processing: ', SYNVAR)
+
+        # Getting z values. x, y, t values gathered just before loop.
         z = df_all_csv[SYNVAR].values.tolist()
         d = [i for i in zip(t,x,y,z)]
+
         df = pd.DataFrame(data=d, columns=['time','lon','lat',SYNVAR])
 
         df.set_index('time', inplace=True)
@@ -339,6 +347,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max, synvar_str):
         # iterate through every x,y grid, differs for every datetime stamp
         
         z_min_list = []; z_max_list = []
+        z_grad_x_min_list = []; z_grad_x_max_list = []; z_grad_y_min_list = []; z_grad_y_max_list = []
         layers, row, cols = np.shape(SYNVAR_3d)
 
         for j in range(0,layers): # Step through Zi-layers
@@ -349,116 +358,142 @@ def import_csv(lon_min, lon_max, lat_min, lat_max, synvar_str):
             xt = SYNVAR_3d[j,:,0]
             yt = SYNVAR_3d[j,:,1]
             zt = SYNVAR_3d[j,:,2]
-            #print('zt for layer {}:\n'.format(j, zt))
-            #xt = df_t['lon'].values.tolist()
-            #yt = df_t['lat'].values.tolist()
-            #zt = df_t[SYNVAR].values.tolist()
-            # (xt, yt) is 1122 x 2
-            # zt is 1122
-            # (Xi, Yi) is N x N = 100 x 100
             xt_yt = np.c_[xt,yt]
+
+            # --- Array shapes:
+            # (xt, yt)  = 1122 x 2
+            # zt        = 1122
+            # (Xi, Yi)  = 100 x 100 (e.g. N x N)
+
+            ''' Calculating gridded interpolated Zi and its gradients.
+                CAPE gradients will also be calculated but won't be 
+                included in the final df. '''
             Zi[:,:,j] = griddata((xt,yt), zt, (Xi,Yi), method='linear') # Converts z data to a regular grid
-            z_min_list.append(np.nanmin(Zi[:,:,j]))
-            z_max_list.append(np.nanmax(Zi[:,:,j]))
-            # print('np.gradient(Zi[:,:,j])[0]:\n', np.gradient(Zi[:,:,j])[0])
-            #Zi_grad_unknown[:,:,j] = np.gradient(Zi[:,:,j])[0]
             Zi_grad_x[:,:,j] = np.gradient(Zi[:,:,j], axis=1)
             Zi_grad_y[:,:,j] = np.gradient(Zi[:,:,j], axis=0)
 
-            print('---------------------- nan min Zi[:,:,j]):\n', np.nanmin(Zi[:,:,j]))
-            #print('Xi[0,:,j]:\n', Xi[0,:])
-            #print('Yi[0,:,j]:\n', Yi[0,:])
-            print('Zi[:,:,j]:\n', Zi[:,:,j])
+            # Min and max lists in the event that taking
+            # np.nanmin(Zi) doesn't work, use np.nanmin(z_min_list)
+            z_min_list.append(np.nanmin(Zi[:,:,j]))
+            z_max_list.append(np.nanmax(Zi[:,:,j]))
+            z_grad_x_min_list.append(np.nanmin(Zi_grad_x[:,:,j]))
+            z_grad_x_max_list.append(np.nanmax(Zi_grad_x[:,:,j]))
+            z_grad_y_min_list.append(np.nanmin(Zi_grad_y[:,:,j]))
+            z_grad_y_max_list.append(np.nanmax(Zi_grad_y[:,:,j]))
 
-
-        print('Zi[:,:,0]:\n', Zi[:,:,0])
-        print('Zi_grad_unknown[:,:,0]:\n', Zi_grad_unknown[:,:,0])
-        print('Zi_grad_x[:,:,0]:\n', Zi_grad_x[:,:,0])
-        print('Zi_grad_y[:,:,0]:\n', Zi_grad_y[:,:,0])
-        print('-----------------------------------\n')
-
-        print('np.nanmin(z_min_list):', np.nanmin(z_min_list))
-        print('np.nanmax(z_max_list):', np.nanmax(z_max_list))
-
-        print('np.nanmin(Zi):', np.nanmin(Zi))
-        print('np.nanmax(Zi):', np.nanmax(Zi))
-
-        print('Zi all-layers min:', np.nanmin(Zi[:,:,:]))
-        print('Zi all-layers max:', np.nanmax(Zi[:,:,:]))
-
+        # Array shapes:
         print('(xt,yt) shape:', np.shape((xt,yt)))
         print('xt_yt shape:', np.shape(xt_yt))
         print('zt shape:', np.shape(zt))
+
+        # Formatting interpolated grid (Xi,Yi,Zi,Zi_grad_x,Zi_grad_y) and time into df:
         m,n,r = np.shape(Zi)
         Xi_shape = np.shape(Xi)
         Yi_shape = np.shape(Yi)
+        t_unique = np.unique(t)
+        num_unique_times = len(t_unique)
+        t_unique_exp = np.repeat(t_unique, m*n)
         print('Xi shape:', np.shape(Xi))
         print('Yi shape:', np.shape(Yi))
-        print('(Xi,Yi) shape:', np.shape((Xi,Yi)))
         print('Zi shape:', np.shape(Zi))
         print('Zi[:,:,10] shape:\n', np.shape(Zi[:,:,10]))
-        t_unique = np.unique(t)
-        print('t_unique:\n', t_unique)
-        num_unique_times = len(t_unique)
-        print('num_unique_times:', num_unique_times)
-        t_unique_exp = np.repeat(t_unique, m*n)
-        print('t_unique_exp:\n', t_unique_exp)
         print('t_unique_exp shape:', np.shape(t_unique_exp))
 
-        Xi_flat = np.ravel(Xi)
         Xi_tiled = np.tile(Xi, num_unique_times)
         Xi_tiled_flat = np.ravel(Xi_tiled)
-        Yi_flat = np.ravel(Yi)
         Yi_tiled = np.tile(Yi, num_unique_times)
         Yi_tiled_flat = np.ravel(Yi_tiled)
         Zi_flat = np.ravel(Zi)
-        print('Xi_tiled:', Xi_tiled_flat)
-        print('Yi_tiled:', Yi_tiled_flat)
-        print('Zi_flat:', Zi_flat)
+        Zi_grad_x_flat = np.ravel(Zi_grad_x)
+        Zi_grad_y_flat = np.ravel(Zi_grad_y)
 
-        arr = np.column_stack((Xi_tiled_flat, Yi_tiled_flat, t_unique_exp, Zi_flat))
-        df_all_csv_interpolated = pd.DataFrame(data=arr, columns=['lon','lat','time',SYNABBR])
-        print('df_all_csv_interpolated:\n', df_all_csv_interpolated)
+        print('Xi_tiled_flat:', np.shape(Xi_tiled_flat))
+        print('Yi_tiled_flat:', np.shape(Yi_tiled_flat))
+        print('Zi_flat:', np.shape(Zi_flat))
+        print('Zi_grad_x_flat:', np.shape(Zi_grad_x_flat))
+        print('Zi_grad_y_flat:', np.shape(Zi_grad_y_flat))
 
-        #Z_flat = np.ravel(zi)
-        Z_min = int(np.nanmin(Zi_grad_x[:,:,:])) # Used to set 3D animation vertical range
-        Z_max = int(np.nanmax(Zi_grad_x[:,:,:])) # Used to set 3D animation vertical range
+
+
+        ''' --- Building each synoptic variable array into a dataframe and concatenating the dataframes
+            on 'inner' indices. Catches any disagreements with index values that array column stack won't. --- '''
+        
+        #SYNABBR_finallist = ['H500 Grad X', 'H500 Grad Y', 'PMSL Grad X', 'PMSL Grad Y']
+        # Gridded interpolated data is put into array, then df_all_grid_interp
+        arr = np.column_stack((Xi_tiled_flat, Yi_tiled_flat, t_unique_exp, Zi_flat, Zi_grad_x_flat, Zi_grad_y_flat))
+        print('arr shape:', np.shape(arr))
+        # df_synvar_grid_interp contains Zi and gradients for a specific synvar (e.g. H500):
+        cols = ['lon','lat','time',SYNVAR,SYNVAR+' Grad X',SYNVAR+' Grad Y']
+        df_synvar_grid_interp = pd.DataFrame(data=arr, columns=cols)
+        # Set index to allow inner joining when concatenating latest df_synvar_grid_interp to df_all_synvar_grid_interp:
+        df_synvar_grid_interp.set_index(['lon','lat','time'], inplace=True)
+        
+        # Sort index by time
+        #df_synvar_grid_interp.sort_index(level=2, inplace=True)
+        print('df_synvar_grid_interp sorted by time:\n', df_synvar_grid_interp)
+
+        if i == 0:
+            # df_all_synvar_grid_interp contains all grid interpolated synoptic variables
+            df_all_synvar_grid_interp = df_all_synvar_grid_interp.append(df_synvar_grid_interp)
+        else:
+            df_all_synvar_grid_interp = pd.concat((df_all_synvar_grid_interp, df_synvar_grid_interp), axis=1, join='inner')
+
+        print('df_all_synvar_grid_interp:\n', df_all_synvar_grid_interp)
+        ''' -------------------------------------------------------------------------------------------------- '''
+
+        # Used to set 3D animation vertical range:
+        Z_min = int(np.nanmin(Zi[:,:,:]))
+        Z_max = int(np.nanmax(Zi[:,:,:]))
+        Z_grad_x_min = int(np.nanmin(Zi_grad_x[:,:,:]))
+        Z_grad_x_max = int(np.nanmax(Zi_grad_x[:,:,:]))
+        Z_grad_y_min = int(np.nanmin(Zi_grad_y[:,:,:]))
+        Z_grad_y_max = int(np.nanmax(Zi_grad_y[:,:,:]))
         
         #plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
-        plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=False, color='0.75', rstride=1, cstride=1)]
+        plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=True, color='0.75', rstride=1, cstride=1)]
 
         ax.set_zlim(Z_min, Z_max)
         ax.zaxis.set_major_locator(LinearLocator(6))
         ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
-        ax.set_zlabel(SYNVAR+': x gradient')
+        ax.set_zlabel(SYNVAR+': X gradient')
         # Color bar which maps values to colors:
         #fig.colorbar(surf, shrink=0.5, aspect=5)
         # NEED THIS BUT NOT WORKING: fig.colorbar(plot, shrink=0.5, aspect=5)
         
-        # Set animation figure parameters
-        fig.set_size_inches(2, 2, True) # width (inches), height (inches), forward = True or False
-        dpi = 300
-        # Animation.FuncAnimation(figure reference, function that updates plot, time interval between frames in milliseconds, (data, plot reference))
-        animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=200, fargs=(Zi_grad_x, plot))
+        ''' --- Animation parameters --- '''
+        # #---Set animation figure parameters:
+        # fig.set_size_inches(2, 2, True) # width (inches), height (inches), forward = True or False
+        # dpi = 300
+        # # Animation.FuncAnimation(figure reference, function that updates plot, time interval between frames in milliseconds, (data, plot reference))
+        # animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=200, fargs=(Zi_grad_x, plot))
         
-        '''--- Save Animation as mp4:'''
-        plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
-        writer = Animation.FFMpegWriter(fps=3, codec='libx264', bitrate=1800)
-        filename = SYNVAR + '_Jan_1_to_14_1979.mp4'
-        animate.save(filename=filename, writer=writer, dpi=dpi)
-        ''' ----------------------------------------------- '''
+        # #--- Save Animation as mp4:
+        # plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
+        # writer = Animation.FFMpegWriter(fps=3, codec='libx264', bitrate=1800)
+        # initial_date = df_all_synvar_grid_interp.index.get_level_values(2)[0].strftime('%b_%d_%Y')
+        # print('initial date:', initial_date)
+        # final_date   = df_all_synvar_grid_interp.index.get_level_values(2)[-1].strftime('%b_%d_%Y')
+        # print('final date:', final_date)
 
-        plt.show() # Animation is saved by the time it shows up.
+        # filename = SYNVAR + '_' + initial_date + '_to_' + final_date + '.mp4' #'_Jan_1_to_14_1979.mp4'
+        # print('filename:', filename)
+        # animate.save(filename=filename, writer=writer, dpi=dpi)
 
-    return df_all_csv, SYNVAR_3d, df, t, x, y, z
+        # plt.show() # Animation is saved by the time it shows up.
+        ''' --------------------------- '''
+
+    # Pickle out:
+    df_all_synvar_grid_interp_pkl = df_all_synvar_grid_interp.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_grid_interp.pkl')
+    
+    return df_all_synvar_grid_interp, df_all_csv, SYNVAR_3d, df, t, x, y, z
 
 
 
 
 ''' --- Run import_csv, synvar_plot --- '''
-df_all_csv, SYNVAR_3d, df, t, x, y, z = import_csv(-125,-116,41,50,'PMSL')
+df_all_synvar_grid_interp, df_all_csv, SYNVAR_3d, df, t, x, y, z = import_csv(-125,-116,41,50)
 ''' ----------------------------------- '''
 
 
