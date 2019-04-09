@@ -14,7 +14,7 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.tri as tri
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
-import matplotlib.animation as Animation
+import matplotlib.animation as Animatiston
 from matplotlib import cm
 import mpl_toolkits.mplot3d.axes3d as p3
 from mpl_toolkits.basemap import Basemap
@@ -31,43 +31,85 @@ import numpy as np
 print(np.__version__)
 
 
-''' --- import_SYNVAR_csv --- '''
-def import_csv(lon_min, lon_max, lat_min, lat_max):
-    #read in all csvs from folder
-    #path = '..\\..\\data\\'
-    #path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
-    # path = ['/home/dp/Documents/FWP/NARR/csv_CAPE/',\
-    #         '/home/dp/Documents/FWP/NARR/csv_PMSL/']
-    # path_csv_H500 = '/home/dp/Documents/FWP/NARR/csv_H500/'
-    path_all_csv = '/home/dp/Documents/FWP/NARR/csv/'
-    
-    ''' csv file names must end with either H500.csv, CAPE.csv, or PMSL.csv '''
-    H500_files = glob.glob(os.path.join(path_all_csv, '*H500.csv')) # H500 file paths in a list
+def import_gridMET_csv():
+    # Path to gridMET outcome variables (ERC, BI, etc) for supervision:
+    path_all_gridMET_csv = '/home/dp/Documents/FWP/gridMET/csv/'
+
+    # gridMET csv file names must end with ERC.csv:
+    all_gridMET_files = glob.glob(os.path.join(path_all_gridMET_csv, '*ERC.csv'))
+    # print('all_gridMET_files:\n', all_gridMET_files)
+
+    nfiles = len(all_gridMET_files)
+    print('Building ERC dataframe, could take a minute. Relax.')
+    df_gen = (pd.read_csv(file, header='infer', index_col=['lon','lat','time']) for file in all_gridMET_files)
+    df_erc = pd.concat(df_gen, axis=0)
+    # print('df: gridMET ERC:\n', df_erc)
+
+    df_erc.reset_index(inplace=True)
+
+    # You can add a datetime object to an entire dataframe column of timedelta objects
+    df_erc['time'] = pd.to_timedelta(df_erc['time'], unit='D') + datetime(1900,1,1,0,0)
+    df_erc.set_index(['lon','lat','time'], inplace=True)
+    df_erc.sort_index(level=2, inplace=True)
+    print('df_erc with timedelta:\n', df_erc)
+
+    df_erc_pkl = df_erc.to_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
+
+    return
+
+''' ------ Import all gridMET CSVs ------ '''
+import_gridMET_csv()
+''' ------------------------------------- '''
+
+
+
+def combine_NARR_gridMET_csv():
+    # Import df_erc_pkl from '/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl', rename df_all_gridMET
+    # Import df_all_synvar_pkl from '/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_pkl', rename df_all_NARR
+    # Specify time window, lon-lat ranges
+    # Select the values in gridMET that are closest to lon-lat values in NARR
+
+
+
+''' --- Import NARR data from csv files and animate it --- '''
+def import_NARR_gridMET_csv(lon_min, lon_max, lat_min, lat_max):
+    # Read in all csvs from folder:
+    # Not sure what the double slashes are for: path = '..\\..\\data\\'
+    # SOMPY path: path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
+
+    # Path to NARR feature variables (H500, PMSL, CAPE, etc):
+    path_all_NARR_csv = '/home/dp/Documents/FWP/NARR/csv/'
+
+    # NARR csv file names must end with either H500.csv, CAPE.csv, or PMSL.csv:
+    H500_files = glob.glob(os.path.join(path_all_NARR_csv, '*H500.csv')) # H500 file paths in a list
+    CAPE_files = glob.glob(os.path.join(path_all_NARR_csv, '*CAPE.csv'))
+    PMSL_files = glob.glob(os.path.join(path_all_NARR_csv, '*PMSL.csv'))
+    all_NARR_files = [H500_files, CAPE_files, PMSL_files] # All file paths in a list of lists
     print('H500_files:\n', H500_files)
-    CAPE_files = glob.glob(os.path.join(path_all_csv, '*CAPE.csv'))
-    PMSL_files = glob.glob(os.path.join(path_all_csv, '*PMSL.csv'))
-    all_files = [H500_files, CAPE_files, PMSL_files]    # All file paths in a list of lists
-    print('all_files:\n', all_files)
+    print('all_NARR_files:\n', all_NARR_files)
+
     SYNABBR_shortlist = ['H500', 'CAPE', 'PMSL']
     ''' Creating  '''
     SYNABBR_list = []
-    for i,var_list in enumerate(all_files):
+    for i,var_list in enumerate(all_NARR_files):
         print('var_list:\n', var_list)
         SYNABBR_list.append([SYNABBR_shortlist[i]]*len(var_list))
     print('SYNABBR_list:\n', SYNABBR_list)
 
     # Example files:
-    # all_files     = [['2_H500.csv', '1_H500.csv'], ['1_CAPE.csv', '2_CAPE.csv'], ['1_PMSL.csv', '2_PMSL.csv']]
+    # all_NARR_files     = [['2_H500.csv', '1_H500.csv'], ['1_CAPE.csv', '2_CAPE.csv'], ['1_PMSL.csv', '2_PMSL.csv']]
     # SYNABBR_list  = [['H500', 'H500'], ['CAPE', 'CAPE'], ['PMSL', 'PMSL']]
 
-    # Looping through all_files = [[synvar_files],[synvar_files],[synvar_files]]. i goes from 0 to 2
-    i_list = list(range(0,len(all_files)))
-    df_all_csv = pd.DataFrame([])
-    for i, SYNVAR_files, SYNABBR in zip(i_list, all_files, SYNABBR_shortlist):
-        # When i = 0, all_files = ['/path/to/1_H500.csv', '/path/to/2_H500.csv'], SYNABBR_shortlist='H500'
-        # When i = 1, all_files = ['/path/to/1_CAPE.csv', '/path/to/2_CAPE.csv'], SYNABBR_shortlist='CAPE'
+    # Looping through all_NARR_files = [[synvar_files],[synvar_files],[synvar_files]]. i goes from 0 to 2
+    i_list = list(range(0,len(all_NARR_files)))
+    df_all_synvar = pd.DataFrame([])
 
-        # Creating a dataframe generator for one type of synoptic variable on each loop through all_files
+    # Loops through list of file paths
+    for i, SYNVAR_files, SYNABBR in zip(i_list, all_NARR_files, SYNABBR_shortlist):
+        # When i = 0, SYNVAR_files = ['/path/to/1_H500.csv', '/path/to/2_H500.csv', ...], SYNABBR_shortlist='H500'
+        # When i = 1, SYNVAR_files = ['/path/to/1_CAPE.csv', '/path/to/2_CAPE.csv', ...], SYNABBR_shortlist='CAPE'
+
+        # Creating a dataframe generator for one type of synoptic variable on each loop through all_NARR_files
         # e.g. When i = 0, df_from_each_file contains all H500 data that concatenates into df
         df_from_each_file = (pd.read_csv(file, header='infer', index_col=['lon', 'lat', 'time']) for file in SYNVAR_files)
         print('df from each file:\n', df_from_each_file)
@@ -84,23 +126,23 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         print('Length of df after reset_index:\n', len(df))
         if i == 0: # First time through loop, append df to columns
             # When i = 0, all H500 files in df are processed:
-            df_all_csv = df_all_csv.append(df)
-            print('First df_all_csv concatenation:\n', df_all_csv)
-        else: # Concat df to rows of df_all_csv
-            df_all_csv = pd.concat((df_all_csv, df), axis=1, join='inner')
-            print('Second df_all_csv concatenation:\n', df_all_csv)
-            print('Columns of df_all_csv concatenation:\n', df_all_csv.columns)
+            df_all_synvar = df_all_synvar.append(df)
+            print('First df_all_synvar concatenation:\n', df_all_synvar)
+        else: # Concat df to rows of df_all_synvar
+            df_all_synvar = pd.concat((df_all_synvar, df), axis=1, join='inner')
+            print('Second df_all_synvar concatenation:\n', df_all_synvar)
+            print('Columns of df_all_synvar concatenation:\n', df_all_synvar.columns)
 
         arr = df.values
         print(' arr:\n', arr)
         print('np.shape(arr):', np.shape(arr))
 
-    print('Final df_all_csv:\n', df_all_csv)
-    print('Final df_all_csv w/ index:\n', df_all_csv)
-    print('Length of final df_all_csv w/index:', len(df_all_csv['CAPE']))
+    print('Final df_all_synvar:\n', df_all_synvar)
+    print('Final df_all_synvar w/ index:\n', df_all_synvar)
+    print('Length of final df_all_synvar w/index:', len(df_all_synvar['CAPE']))
 
-    print('df_all_csv.loc[index values]:\n', df_all_csv.loc[-131.602, 49.7179, '1979-01-01 00:00:00'])
-    print('df_all_csv.loc[[index values]]:\n', df_all_csv.loc[[-131.602, 49.7179, '1979-01-01 00:00:00']])
+    print('df_all_synvar.loc[index values]:\n', df_all_synvar.loc[-131.602, 49.7179, '1979-01-01 00:00:00'])
+    print('df_all_synvar.loc[[index values]]:\n', df_all_synvar.loc[[-131.602, 49.7179, '1979-01-01 00:00:00']])
 
     # get columns Lat, Lon, Mean Temp, Max Temp, Min temp, Precipitation
     data = df[[]]
@@ -108,12 +150,11 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
     data = data.dropna(how='any')
     #names = ['Latitude', 'Longitude', 'Monthly Median temperature (C)', 'Monthly Max temperature (C)', 'Monthly Min temperature (C)', 'Monthly total precipitation (mm)']
     print('data.head():\n', data.head())
-    
+
     # Pickle out:
-    df_all_csv_pkl = df_all_csv.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_csv.pkl')
+    df_all_synvar_pkl = df_all_synvar.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar.pkl')
 
-
-    '''--- Plots a select synoptic variable from df_all_csv ---'''
+    '''--- Plots a select synoptic variable from df_all_synvar ---'''
 
     # Checking index referencing:
     print('type(df.index.get_level_values(0)):\n', type(df.index.get_level_values(0)))  # Referencing lon type
@@ -123,19 +164,19 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
     print('type(df.index.get_level_values(2)):\n', type(df.index.get_level_values(2)))  # Referencing time type
     print('df.index.get_level_values(2)[0]:\n', df.index.get_level_values(2)[0])        # Referencing time index values
 
-    x = df_all_csv.index.get_level_values(0).tolist()
-    y = df_all_csv.index.get_level_values(1).tolist()
-    t = df_all_csv.index.get_level_values(2).tolist()
-    # print('x values from df_all_csv index level 0:\n', x)
-    # print('y values from df_all_csv index level 1:\n', y)
-    # print('t values from df_all_csv index level 2:\n', t)
-    
+    x = df_all_synvar.index.get_level_values(0).tolist()
+    y = df_all_synvar.index.get_level_values(1).tolist()
+    t = df_all_synvar.index.get_level_values(2).tolist()
+    # print('x values from df_all_synvar index level 0:\n', x)
+    # print('y values from df_all_synvar index level 1:\n', y)
+    # print('t values from df_all_synvar index level 2:\n', t)
+
     df_all_synvar_grid_interp = pd.DataFrame([])
     for i, SYNVAR in enumerate(SYNABBR_shortlist):
         print('Now processing: ', SYNVAR)
 
         # Getting z values. x, y, t values gathered just before loop.
-        z = df_all_csv[SYNVAR].values.tolist()
+        z = df_all_synvar[SYNVAR].values.tolist()
         d = [i for i in zip(t,x,y,z)]
 
         df = pd.DataFrame(data=d, columns=['time','lon','lat',SYNVAR])
@@ -143,7 +184,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         df.set_index('time', inplace=True)
         print('df.index:\n', df.index)
         print('df.index[10]:\n', df.index[10])
-        
+
 
         ''' --- SYNVAR Tripcolor & Tricontourf: Unevenly spaced grid --- '''
 
@@ -180,7 +221,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
 
 
         num_datetimes = SYNVAR_3d_shape[0]  # Used to specify number of layers in Z and Zi
-        
+
         f, ax = plt.subplots(1,2, sharex=True, sharey=True)
         ax[0].tripcolor(x,y,z)
         ax[1].tricontourf(x_t0,y_t0,z_t0,20)#, cmap=cm.jet) # 20 contour levels is good quality
@@ -192,7 +233,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
 
     ##   plt.savefig('SYNVAR_OR_WA_pyplot.png')
         plt.show()
-        
+
         ''' --- SYNVAR surf plot w/ evenly spaced grid - not working --- '''
         npts = 200
         N = 200
@@ -222,7 +263,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         # print('Xi:\n', Xi)
         # print('Yi:\n', Yi)
         # print('zi:\n', Zi)
-        
+
     ##    fig, (ax1, ax2) = plt.subplots(nrows=2)
     ##    ax1.contour(Xi, Yi, zi, levels=14, linewidths=0.5, colors='k')
     ##    cntr1 = ax1.contourf(Xi, Yi, zi, levels=14, cmap="RdBu_r")
@@ -281,8 +322,8 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         # Color bar which maps values to colors:
         fig.colorbar(surf, shrink=0.5, aspect=5)
         plt.show()
-        
-        
+
+
         ''' --- Example 3D Animation --- '''
         ''' Uncomment to run '''
         # def update_plot(frame_number, zarray, plot):
@@ -314,8 +355,8 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         # ax.set_zlim(0,1.5)
         # animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=40, fargs=(zarray, plot))
         # plt.show()
-        
-        
+
+
         ''' --- Animation: SYNVAR and SYNVAR gradient --- '''
         def update_plot(frame_number, Zi_grad_x, plot):
             plot[0].remove()
@@ -326,7 +367,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
 
         N = 200       # x and y grid number of points. 100 x 100 = 10,000 grid points
         nmax = num_datetimes     # number of z matrices (e.g. frames or unique datetime objects)
-        
+
         xi = np.linspace(lon_min, lon_max, N)       # -126, -115
         yi = np.linspace(lat_min, lat_max, N)       # 40, 51
         Xi, Yi = np.meshgrid(xi, yi)                # Xi, Yi meshgrid
@@ -338,14 +379,14 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         ''' Step through list of variables in df and display each.
             Also calculating gradients for H500 and PMSL and creating
             dataframe to house these variables '''
-    
+
         Zi = np.zeros((N, N, nmax))                 # zi values set to zero, filled below
         Zi_grad_unknown = np.zeros((N, N, nmax))          # zi values set to zero, filled below
         Zi_grad_x = np.zeros((N, N, nmax))          # zi values set to zero, filled below
         Zi_grad_y = np.zeros((N, N, nmax))          # zi values set to zero, filled below
 
         # iterate through every x,y grid, differs for every datetime stamp
-        
+
         z_min_list = []; z_max_list = []
         z_grad_x_min_list = []; z_grad_x_max_list = []; z_grad_y_min_list = []; z_grad_y_max_list = []
         layers, row, cols = np.shape(SYNVAR_3d)
@@ -354,7 +395,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
             # SYNVAR_3d[datetime:row:column]
             # jth time point
             # all rows within jth timepoint
-            # 0th, 1st, or 2nd 
+            # 0th, 1st, or 2nd
             xt = SYNVAR_3d[j,:,0]
             yt = SYNVAR_3d[j,:,1]
             zt = SYNVAR_3d[j,:,2]
@@ -366,7 +407,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
             # (Xi, Yi)  = 100 x 100 (e.g. N x N)
 
             ''' Calculating gridded interpolated Zi and its gradients.
-                CAPE gradients will also be calculated but won't be 
+                CAPE gradients will also be calculated but won't be
                 included in the final df. '''
             Zi[:,:,j] = griddata((xt,yt), zt, (Xi,Yi), method='linear') # Converts z data to a regular grid
             Zi_grad_x[:,:,j] = np.gradient(Zi[:,:,j], axis=1)
@@ -417,7 +458,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
 
         ''' --- Building each synoptic variable array into a dataframe and concatenating the dataframes
             on 'inner' indices. Catches any disagreements with index values that array column stack won't. --- '''
-        
+
         #SYNABBR_finallist = ['H500 Grad X', 'H500 Grad Y', 'PMSL Grad X', 'PMSL Grad Y']
         # Gridded interpolated data is put into array, then df_all_grid_interp
         arr = np.column_stack((Xi_tiled_flat, Yi_tiled_flat, t_unique_exp, Zi_flat, Zi_grad_x_flat, Zi_grad_y_flat))
@@ -427,7 +468,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         df_synvar_grid_interp = pd.DataFrame(data=arr, columns=cols)
         # Set index to allow inner joining when concatenating latest df_synvar_grid_interp to df_all_synvar_grid_interp:
         df_synvar_grid_interp.set_index(['lon','lat','time'], inplace=True)
-        
+
         # Sort index by time
         #df_synvar_grid_interp.sort_index(level=2, inplace=True)
         print('df_synvar_grid_interp sorted by time:\n', df_synvar_grid_interp)
@@ -455,7 +496,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         Z_grad_x_max = int(np.nanmax(Zi_grad_x[:,:,:]))
         Z_grad_y_min = int(np.nanmin(Zi_grad_y[:,:,:]))
         Z_grad_y_max = int(np.nanmax(Zi_grad_y[:,:,:]))
-        
+
         #plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
         plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=True, color='0.75', rstride=1, cstride=1)]
 
@@ -468,14 +509,14 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
         # Color bar which maps values to colors:
         #fig.colorbar(surf, shrink=0.5, aspect=5)
         # NEED THIS BUT NOT WORKING: fig.colorbar(plot, shrink=0.5, aspect=5)
-        
+
         ''' --- Animation parameters --- '''
         # #---Set animation figure parameters:
         # fig.set_size_inches(2, 2, True) # width (inches), height (inches), forward = True or False
         # dpi = 300
         # # Animation.FuncAnimation(figure reference, function that updates plot, time interval between frames in milliseconds, (data, plot reference))
         # animate = Animation.FuncAnimation(fig, update_plot, nmax, interval=200, fargs=(Zi_grad_x, plot))
-        
+
         # #--- Save Animation as mp4:
         # plt.rcParams['animation.ffmpeg_path'] = '/usr/bin/ffmpeg'
         # writer = Animation.FFMpegWriter(fps=3, codec='libx264', bitrate=1800)
@@ -498,7 +539,7 @@ def import_csv(lon_min, lon_max, lat_min, lat_max):
     # Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
     df_chosen = df_all_synvar_grid_interp.drop(columns=['CAPE Grad X', 'CAPE Grad Y'])
 
-    return df_chosen, df_all_synvar_grid_interp, df_all_csv, SYNVAR_3d, df, t, x, y, z
+    return df_chosen, df_all_synvar_grid_interp, df_all_synvar, SYNVAR_3d, df, t, x, y, z
 
 
 ''' Import pickle file, export as csv for SOM training in Julia '''
@@ -515,26 +556,22 @@ def synvarPickleToCSV(pickle_in_filename, csv_out_filename, cols_list):
     df.to_csv(csv_dir, index=True, header=True) # Includes index columns, names all columns at top of file
     return
 
-
-
-
 ''' --- Run import_csv, synvar_plot --- '''
-# df_chosen, df_all_synvar_grid_interp, df_all_csv, SYNVAR_3d, df, t, x, y, z = import_csv(-125,-116,41,50)
+#df_chosen, df_all_synvar_grid_interp, df_all_synvar, SYNVAR_3d, df, t, x, y, z = import_NARR_gridMET_csv(-125,-116,41,50)
 ''' ----------------------------------- '''
 
 ''' --- Run synvarPickleToCSV --- '''
-df = synvarPickleToCSV('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_interp.csv',['H500 Grad X'])
+#df = synvarPickleToCSV('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_interp.csv',['H500 Grad X'])
 ''' ----------------------------- '''
 
-
-# ### read in all csvs from folder
+# Read in all csvs from folder
 # path = '..\\..\\data\\'
 # path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
-# all_files = glob.glob(os.path.join(path, "*.csv"))
-# print('all_files:\n' ,all_files[0:10])
+# all_NARR_files = glob.glob(os.path.join(path, "*.csv"))
+# print('all_NARR_files:\n' ,all_NARR_files[0:10])
 
 # # concat into one df
-# df_from_each_file = (pd.read_csv(f, skiprows = 31) for f in all_files)
+# df_from_each_file = (pd.read_csv(f, skiprows = 31) for f in all_NARR_files)
 # concatenated_df   = pd.concat(df_from_each_file, ignore_index=True)
 
 # print('concatenated df head:\n', concatenated_df.head)
@@ -650,7 +687,7 @@ df = synvarPickleToCSV('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_inter
 #     ax.pcolormesh(Y,Z, yz_matrix, cmap='inferno')
 #     ax.set_title("pcolormesh data")
 
-#     # now interpolate data to new grid 
+#     # now interpolate data to new grid
 #     zi = np.arange(-2845,-5) # A new, higher resolution z, increment is 1 from -2845 to -5
 #     print('zi:\n', zi)
 #     YI,ZI = np.meshgrid(y,zi)
@@ -667,7 +704,7 @@ df = synvarPickleToCSV('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_inter
 #         method = linear interpolation '''
 #     interp = griddata(points, yz_matrix.flatten(), (YI,ZI), method='linear')
 #     print('interp:\n', interp)
-    
+
 #     ax2.pcolormesh(YI,ZI, interp, cmap='inferno')
 #     ax2.set_title("pcolormesh interpolated")
 
@@ -684,7 +721,7 @@ df = synvarPickleToCSV('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_inter
 #     xi = np.arange(min(x), max(x), 0.5)
 #     yi = np.arange(min(y), max(y), 0.5)
 #     print('yi:\n', yi)
-    
+
 #     x, y = np.meshgrid(x, y)
 #     xx, yy = np.meshgrid(xi, yi)
 #     print('xx:\n', xx)
