@@ -20,6 +20,8 @@ import mpl_toolkits.mplot3d.axes3d as p3
 from mpl_toolkits.basemap import Basemap
 
 from scipy.interpolate import griddata
+from scipy import spatial
+from sklearn import neighbors
 
 import math
 import glob
@@ -74,19 +76,80 @@ def merge_NARR_gridMET_csv():#lon_min, lon_max, lat_min, lat_max):
     df_gridMET.reset_index(inplace=True)
     df_gridMET['time'] = df_gridMET['time'].dt.date # Converting time to date
     print('df_gridMET reduced to dates **************************************:\n', df_gridMET)
-    # Set the time data to date
+    # Set the datetimes to dates
 
     df_NARR.reset_index(inplace=True)
     df_NARR['time'] = df_NARR['time'].dt.date # Converting time to date
     print('df_NARR reduced to dates **************************************:\n', df_NARR)
     NARR_synvar = df_NARR.columns
+
+    # Using Jan 1, 1979 only:
+    dt_object = datetime(1979,1,1,0,0,0)
+    date = datetime.date(dt_object)
+    df_gridMET = df_gridMET[df_gridMET['time'] == date]
+    df_NARR = df_NARR[df_NARR['time'] == date]
+    print('df_gridMET:\n', df_gridMET)
+    print('df_NARR:\n', df_NARR)
+    print('df_gridMET shape:\n', np.shape(df_gridMET.values))
+    print('df_NARR shape:\n', np.shape(df_NARR.values))
+
+
+    # Interpolation:
+    would_you_be_my_neighbor = 5
+    tree = neighbors.KDTree(df_gridMET.values[:,0:2], leaf_size=2)
+    dist, ind = tree.query(df_NARR.values[:,0:2], k=would_you_be_my_neighbor)
+    # print('df_gridMET.values:\n', df_gridMET.values)
+    # print('df_gridMET.values[:,0:2]:\n', df_gridMET.values[:,0:2])
+    # print('df_NARR:\n', df_NARR)
+    # print('df_NARR.loc[6]:\n', df_NARR.loc[6])
+    # print('df_NARR[5:6]:\n', df_NARR[5:6])
+    # print('df_NARR[:1]:\n', df_NARR[:1])
+
+    # print('df_gridMET[ind]:\n', df_gridMET.iloc[0])
+    # print('df_gridMET[ind]:\n', df_gridMET.iloc[20])
+    # print('df_gridMET[ind]:\n', df_gridMET.iloc[1])
+
+    print('indices:', ind)  # indices of 3 closest neighbors
+    print('distances:', dist)  # distances to 3 closest neighbors
+
+    x = df_gridMET.lon.values
+    y = df_gridMET.lat.values
+    z = df_gridMET.erc.values
+    xi = df_NARR.lon.values
+    yi = df_NARR.lat.values
+    print('x:\n{}\n y:\n{}\n z:\n{}\n'.format(x, y, z))
+    print('xi:\n{}\n yi:\n{}\n'.format(xi,yi))
+    print('x shape:\n{}\n y shape:\n{}\n z shape:\n{}\n'.format(np.shape(x), np.shape(y), np.shape(z)))
+    print('xi shape:\n{}\n yi shape:\n{}\n'.format(np.shape(xi),np.shape(yi)))
+
+    zi = griddata((x,y),z,(xi,yi),mesthod='nearest')
+    print('zi:\n', zi)
+    print('zi shape:\n{}\n'.format(np.shape(zi)))
+
+    plt.close()
+    plt.figure()
+    plt.scatter(x=df_gridMET.lon, y=df_gridMET.lat, color='white', marker='o', edgecolors='g', s=df_gridMET.erc, label='gridMET')
+    plt.scatter(x=df_gridMET.lon.iloc[np.ravel(ind)], y=df_gridMET.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
+    plt.scatter(x=df_NARR.lon, y=df_NARR.lat, color='k', marker='+', s=7, label='NARR')
+    plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    plt.legend()
+    plt.savefig('NARR_gridMET_before_interp.png', bbox_inches='tight')
+    plt.show()
+
+    plt.scatter(x=df_gridMET.lon, y=df_gridMET.lat, color='white', marker='o', edgecolors='g', s=df_gridMET.erc, label='gridMET')
+    plt.scatter(x=df_gridMET.lon.iloc[np.ravel(ind)], y=df_gridMET.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
+    plt.scatter(x=xi, y=yi, color='y', edgecolors='y', alpha=0.6, marker='o', s=zi, label='interp NARR')
+    plt.scatter(x=df_NARR.lon, y=df_NARR.lat, color='k', marker='+', s=7, label='NARR')
+    plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    plt.legend()
+    plt.savefig('NARR_gridMET_after_interp.png', bbox_inches='tight')
+    plt.show()
     # df_NARR_24hr = df_NARR.groupby('time')[NARR_synvar].mean() # Average all columns over one day
 
     # df_NARR_gridMET = pd.merge(df_NARR_24hr, df_gridMET, left_index=True, right_index=True)
     # print('df_NARR_gridMET:\n', df_NARR_gridMET)
 
     # Merge gridMET and NARR on shared lon-lat values.
-
 
     return
 
@@ -114,7 +177,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
     print('all_NARR_files:\n', all_NARR_files)
 
     SYNABBR_shortlist = ['H500', 'CAPE', 'PMSL']
-    ''' Creating  '''
+    ''' Creating '''
     SYNABBR_list = []
     for i,var_list in enumerate(all_NARR_files):
         print('var_list:\n', var_list)
