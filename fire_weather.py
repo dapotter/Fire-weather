@@ -93,25 +93,46 @@ def merge_NARR_gridMET_csv():#lon_min, lon_max, lat_min, lat_max):
     print('df_gridMET shape:\n', np.shape(df_gridMET.values))
     print('df_NARR shape:\n', np.shape(df_NARR.values))
 
+    # PLOT 1: Plotting NARR grid over gridMET grid:
+    plt.figure()
+    plt.scatter(x=df_gridMET.lon, y=df_gridMET.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
+    plt.scatter(x=df_NARR.lon, y=df_NARR.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
+    plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    plt.title('NARR grid after removing out-of-bounds points')
+    plt.legend()
+    plt.savefig('NARR_gridMET_complete_grids.png', bbox_inches='tight')
+    plt.show()
 
-    # Interpolation:
-    would_you_be_my_neighbor = 5
-    tree = neighbors.KDTree(df_gridMET.values[:,0:2], leaf_size=2)
-    dist, ind = tree.query(df_NARR.values[:,0:2], k=would_you_be_my_neighbor)
-    # print('df_gridMET.values:\n', df_gridMET.values)
-    # print('df_gridMET.values[:,0:2]:\n', df_gridMET.values[:,0:2])
-    # print('df_NARR:\n', df_NARR)
-    # print('df_NARR.loc[6]:\n', df_NARR.loc[6])
-    # print('df_NARR[5:6]:\n', df_NARR[5:6])
-    # print('df_NARR[:1]:\n', df_NARR[:1])
+    # Changing invalid data points to values the interpolation
+    # algorithm can interpolate to:
+    df_gridMET.replace(-32767, 1.0123456789, inplace=True)
 
-    # print('df_gridMET[ind]:\n', df_gridMET.iloc[0])
-    # print('df_gridMET[ind]:\n', df_gridMET.iloc[20])
-    # print('df_gridMET[ind]:\n', df_gridMET.iloc[1])
+    # Clip NARR grid to min and max lon lat values in the gridMET grid
+    x_min = min(df_gridMET['lon'].values); x_max = max(df_gridMET['lon'].values)
+    y_min = min(df_gridMET['lat'].values); y_max = max(df_gridMET['lat'].values)
+    print('x_min:\n', x_min)
+    print('x_max:\n', x_max)
+    print('y_min:\n', y_min)
+    print('y_max:\n', y_max)
 
-    print('indices:', ind)  # indices of 3 closest neighbors
-    print('distances:', dist)  # distances to 3 closest neighbors
+    # Select all rows that are inside the lon-lat window of the ERC dataset:
+    criteria = (x_max >= df_NARR['lon']) & (df_NARR['lon'] >= x_min) & (y_max >= df_NARR['lat']) & (df_NARR['lat'] >= y_min)
+    print('NARR rows before cutting out-of-bounds lon-lat points:', df_NARR.count())
+    df_NARR = df_NARR.loc[criteria]
+    print('NARR rows after cutting out-of-bounds lon-lat points:', df_NARR.count())
+    print('df_NARR after removing out-of-bounds Lon-Lat points:\n', df_NARR)
 
+    # PLOT 2: Plotting NARR grid where it overlaps with gridMET:
+    plt.figure()
+    plt.scatter(x=df_gridMET.lon, y=df_gridMET.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
+    plt.scatter(x=df_NARR.lon, y=df_NARR.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
+    plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    plt.title('NARR grid after removing out-of-bounds points')
+    plt.legend()
+    plt.savefig('NARR_gridMET_complete_grids.png', bbox_inches='tight')
+    plt.show()
+
+    # Define x y and z for interpolation:
     x = df_gridMET.lon.values
     y = df_gridMET.lat.values
     z = df_gridMET.erc.values
@@ -121,17 +142,36 @@ def merge_NARR_gridMET_csv():#lon_min, lon_max, lat_min, lat_max):
     print('xi:\n{}\n yi:\n{}\n'.format(xi,yi))
     print('x shape:\n{}\n y shape:\n{}\n z shape:\n{}\n'.format(np.shape(x), np.shape(y), np.shape(z)))
     print('xi shape:\n{}\n yi shape:\n{}\n'.format(np.shape(xi),np.shape(yi)))
+    
+    # Interpolation:
+    would_you_be_my_neighbor = 5
+    gridMET_shape = np.shape(df_gridMET.values[:,0:2])
+    NARR_shape = np.shape(df_NARR.values[:,0:2])
+    print('gridMET shape:', gridMET_shape)
+    print('NARR shape:', NARR_shape)
+    tree = neighbors.KDTree(df_gridMET.values[:,0:2], leaf_size=2)
+    dist, ind = tree.query(df_NARR.values[:,0:2], k=would_you_be_my_neighbor)
+    print('indices:', ind)  # indices of 3 closest neighbors
+    print('distances:', dist)  # distances to 3 closest neighbors
+    print('df_NARR with ERC rounded to nearest int and invalid rows removed:\n', df_NARR)
 
-    zi = griddata((x,y),z,(xi,yi),mesthod='nearest')
+    # Create ERC data (zi) from interpolated grid
+    zi = griddata((x,y),z,(xi,yi),method='nearest')
     print('zi:\n', zi)
     print('zi shape:\n{}\n'.format(np.shape(zi)))
 
+
+    # Plotting before and after interpolation of gridMET ERC to NARR grid:
+    # Plots gridMET grid before and after interpolation. It uses gridMET grid,
+    # so the plotting is done here rather than inside of plot_NARR_ERC() which
+    # already has the gridMET ERC data within df_NARR_ERC.
     plt.close()
     plt.figure()
     plt.scatter(x=df_gridMET.lon, y=df_gridMET.lat, color='white', marker='o', edgecolors='g', s=df_gridMET.erc, label='gridMET')
     plt.scatter(x=df_gridMET.lon.iloc[np.ravel(ind)], y=df_gridMET.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
     plt.scatter(x=df_NARR.lon, y=df_NARR.lat, color='k', marker='+', s=7, label='NARR')
     plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    plt.title('Nearest gridMET points using interpolated indices')
     plt.legend()
     plt.savefig('NARR_gridMET_before_interp.png', bbox_inches='tight')
     plt.show()
@@ -141,21 +181,105 @@ def merge_NARR_gridMET_csv():#lon_min, lon_max, lat_min, lat_max):
     plt.scatter(x=xi, y=yi, color='y', edgecolors='y', alpha=0.6, marker='o', s=zi, label='interp NARR')
     plt.scatter(x=df_NARR.lon, y=df_NARR.lat, color='k', marker='+', s=7, label='NARR')
     plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    plt.title('Interpolated ERC values')
     plt.legend()
     plt.savefig('NARR_gridMET_after_interp.png', bbox_inches='tight')
     plt.show()
-    # df_NARR_24hr = df_NARR.groupby('time')[NARR_synvar].mean() # Average all columns over one day
 
-    # df_NARR_gridMET = pd.merge(df_NARR_24hr, df_gridMET, left_index=True, right_index=True)
-    # print('df_NARR_gridMET:\n', df_NARR_gridMET)
 
-    # Merge gridMET and NARR on shared lon-lat values.
+
+    # Add interpolated ERC values to df_NARR:
+    df_NARR['ERC'] = zi
+    print('df_NARR with ERC:\n', df_NARR)
+
+    # Remove invalid values:
+    df_NARR = df_NARR[df_NARR['ERC'] != 1.0123456789]
+
+    # # Round all zi values and convert to integers (ERC is an integer scale)
+    # zi = np.round(zi)
+    # zi = [int(x) for x in zi]
+    # print('zi shape after int conversion:\n{}\n'.format(np.shape(zi)))
+
+    print('df_NARR before rounding ERC:\n', df_NARR)
+    df_NARR = df_NARR.round({'ERC':0})
+    print('df_NARR after rounding ERC:\n', df_NARR)
+
+
+    df_NARR_ERC_pkl = df_NARR.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
+
+    return
+
+def plot_NARR_ERC(ERC_date):
+    # This function plots the following:
+    # 1) A somewhate useless lon-lat plot of ERC data where ERC magnitude is represented by marker size.
+    # 2) A contour plot containing tripcolour and tricontourf subplots of ERC data.
+
+    df_NARR_ERC = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
+    print('df_NARR with ERC:\n', df_NARR_ERC)
+
+    # # Plotting before and after interpolation of gridMET ERC:
+    # plt.close()
+    # plt.figure()
+    # plt.scatter(x=df_NARR_ERC.lon, y=df_NARR_ERC.lat, color='white', marker='o', edgecolors='k', s=df_NARR_ERC.ERC, label='ERC on NARR grid')
+    # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+    # plt.legend()
+    # plt.savefig('NARR_ERC.png', bbox_inches='tight')
+    # plt.show()
+
+    # WARNING: These x,y,t values are for all days in df_NARR_ERC.
+    # Currently, df_NARR_ERC only covers Jan 1, 1979, and this
+    # means the plot below that uses these values works. It won't
+    # work when there are multiple dates.
+    x = df_NARR_ERC.lon.values.tolist()     # Longitude
+    y = df_NARR_ERC.lat.values.tolist()     # Latitude
+    t = df_NARR_ERC.time.values.tolist()    # Time
+    # print('x values from df_NARR_ERC.lon:\n', x)
+    # print('y values from df_NARR_ERC.lat:\n', y)
+    # print('t values from df_NARR_ERC.time:\n', t)
+
+    # Getting z values and building new dataframe with time index and ERC data.
+    z = df_NARR_ERC['ERC'].values.tolist()
+    d = [i for i in zip(t,x,y,z)]
+    df = pd.DataFrame(data=d, columns=['time','lon','lat','ERC'])
+    df.set_index('time', inplace=True)
+    print('df.index:\n', df.index)
+    print('df.index[10]:\n', df.index[10])
+
+    # Convert timepoint to build contour plot from ERC data
+    ERC_date = datetime.strptime(ERC_date, '%Y,%m,%d')
+    ERC_date = datetime.date(ERC_date)
+    print('ERC_date:', ERC_date)
+    # Get the ERC data for the day specified
+    df_t0 = df[(df.index == ERC_date)]
+    # Split into constituents
+    x_t0 = df_t0['lon'].values.tolist()
+    y_t0 = df_t0['lat'].values.tolist()
+    z_t0 = df_t0['ERC'].values.tolist()
+    print('df_t0:\n', df_t0)
+    # print('Shape x_t0:\n', np.shape(x_t0))
+    # print('Shape y_t0:\n', np.shape(y_t0))
+    # print('Shape z_t0:\n', np.shape(z_t0))
+
+    plt.close()
+    f, ax = plt.subplots(1,2, figsize=(8,4), sharex=True, sharey=True)
+
+    ax[0].tripcolor(x,y,z) # Plots across all timepoints?
+    ax[0].plot(x,y, 'ko ', markersize=1)
+    ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+
+    ax[1].tricontourf(x_t0,y_t0,z_t0,20)#, cmap=cm.jet) # 20 contour levels is good quality
+    ax[1].plot(x_t0,y_t0, 'ko ', markersize=1)
+    ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+    
+    plt.savefig('ERC_contour.png', bbox_inches='tight')
+    plt.show()
 
     return
 
 
 ''' ------ Import all gridMET CSVs ------ '''
 merge_NARR_gridMET_csv()
+plot_NARR_ERC('1979,1,1')
 ''' ------------------------------------- '''
 
 
@@ -274,7 +398,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         print('df.index[10]:\n', df.index[10])
 
 
-        ''' --- SYNVAR Tripcolor & Tricontourf: Unevenly spaced grid --- '''
+        ''' --------------- SYNVAR Tripcolor & Tricontourf: Unevenly spaced grid --------------- '''
 
         # Looking at content of df index values:
         df2 = df[(df.index == datetime(1979,1,1,0,0,0))]#.values.tolist()
@@ -307,7 +431,6 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         our_arr_with_time = np.column_stack((out_arr,t))
         print('our_arr_with_time:\n', our_arr_with_time)
 
-
         num_datetimes = SYNVAR_3d_shape[0]  # Used to specify number of layers in Z and Zi
 
         f, ax = plt.subplots(1,2, sharex=True, sharey=True)
@@ -322,7 +445,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
     ##   plt.savefig('SYNVAR_OR_WA_pyplot.png')
         plt.show()
 
-        ''' --- SYNVAR surf plot w/ evenly spaced grid - not working --- '''
+        ''' --------------- SYNVAR surf plot w/ evenly spaced grid - not working --------------- '''
         npts = 200
         N = 200
 
