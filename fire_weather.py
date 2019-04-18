@@ -96,21 +96,7 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
     df_gridMET['time'] = df_gridMET['time'].dt.date # Converting time to date
     print('df_gridMET reduced to dates **************************************:\n', df_gridMET)
 
-    # NARR times are in UTC
-    df_NARR.reset_index(inplace=True)
-    print('df_NARR reset index:\n', df_NARR)
-    print('df_NARR index is lon:\n', df_NARR)
-
-    print('df_NARR lon lat grouping mean:\n', df_NARR.groupby(['lon','lat']).mean())
-
-    df_NARR.set_index('lon', inplace=True)
-    print('df_NARR.loc[-131.602]:\n', df_NARR.loc[-131.602])
-
-    return
-
-    df_NARR['time'] = df_NARR['time'].dt.date # Converting time to date
-    print('df_NARR reduced to dates **************************************:\n', df_NARR)
-
+    ################################################################
     # Date range strings parsed to datetime objects
     start_dt_object = datetime.strptime(start_date, '%Y,%m,%d')
     end_dt_object = datetime.strptime(end_date, '%Y,%m,%d')
@@ -133,9 +119,67 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
     print('timedelta_list:\n', timedelta_list)
     date_list = [td+start_date_object for td in timedelta_list]
     print('date_list:\n', date_list)
+    
     # Removes first day. NARR average needs averages across day 1 and 2, thus gridMET data must start on day 2
     date_list = date_list[1:]
 
+    # Creating time range list of tuples used to select a time range for each
+    # NARR grid point and then average the data associated with those grid points.
+    # Note that date_list now starts at day 2.
+    time_range_list = [(pd.Timestamp(d)-timedelta(hours=3),pd.Timestamp(d)+timedelta(hours=18)) for d in date_list]
+    print('time_range_list:\n', time_range_list)
+    ################################################################
+
+    # df_NARR currently has lon, lat, time as indices:
+    df_NARR.reset_index(inplace=True)
+
+    # Setting the index to time to select all data in a particular time range before
+    # grouping on longitude:
+    df_NARR.set_index('time', inplace=True)
+
+    # time_range_list is a list of tuples of times:
+    # time_range_list = [(Timestamp(1979,1,1,21,0,0), Timestamp(1979,1,2,18,0,0)),...]
+    df_NARR_all_time_avg = pd.DataFrame([])
+    for i, tr in enumerate(time_range_list):
+        # This loop goes through all of the NARR data and gets each grid point's
+        # data for datetime ranges from day-1 2100 UTC to day 1800 UTC and
+        # averages that data, then moves onto to the same time range for the
+        # next, concatenating the dataframes together.
+
+        # # Running this section prints each of the NARR grid point's
+        # # data for the specified time range. There are a lot of grid points,
+        # # takes some time to print.
+        # # Grouping by longitude after a select time range is selected:
+        # for name, group in df_NARR_time_range.groupby('lon'):
+        #     print(name)
+        #     print(group)
+        # df_NARR_time_avg = df_NARR_time_range.groupby('lon').mean()
+        
+        tr_start = tr[0]
+        tr_end = tr[1]
+
+        D = datetime.date(tr_end) # NARR date associated with gridMET date
+
+        # Average time across range, assign a date column to specify date
+        df_NARR_time_avg = df_NARR.loc[tr_start:tr_end].groupby('lon').mean()
+        df_NARR_time_avg['time'] = D
+        print('df_NARR_time_avg:\n', df_NARR_time_avg)
+
+        if i == 0: # First time through loop, append df_NARR_date to columns
+            # When i = 0, all H500 files in df are processed:
+            df_NARR_all_time_avg = df_NARR_all_time_avg.append(df_NARR_time_avg)
+            print('First df_NARR_all_time_avg concatenation:\n', df_NARR_all_time_avg)
+        else: # Concat df_NARR_date to rows of df_NARR_ERC
+            df_NARR_all_time_avg = pd.concat((df_NARR_all_time_avg, df_NARR_time_avg), axis=0)
+            # print('Second df_NARR_all_time_avg concatenation:\n', df_NARR_time_avg)
+            # print('df_NARR_time_avg.columns:\n', df_NARR_time_avg.columns)
+            print('***************************** Analyzing {} - {} *****************************'.format(tr_start,tr_end))
+
+    df_NARR = df_NARR_all_time_avg
+    
+    # Right now lon is the index value, reset it, set index to time
+    df_NARR.reset_index(inplace=True)
+    print('df_NARR after time range averaging:\n', df_NARR)
 
     df_NARR_ERC = pd.DataFrame([])
     for i, d in enumerate(date_list):
@@ -225,10 +269,10 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
         # so the plotting is done here rather than inside of plot_NARR_ERC() which
         # already has the gridMET ERC data within df_NARR_date_ERC.
 
-        if d == date_list[-1]: # Only plot if on last date in list
+        if d == date_list[-1]: # Only plot if on last date in date_list
             plt.close()
             plt.figure()
-            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc, label='gridMET')
+            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
             plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
             plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
             plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
@@ -237,7 +281,7 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
             plt.savefig('NARR_gridMET_before_interp.png', bbox_inches='tight')
             plt.show()
 
-            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc, label='gridMET')
+            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
             plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
             plt.scatter(x=xi, y=yi, color='y', edgecolors='y', alpha=0.6, marker='o', s=zi, label='interp NARR')
             plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
@@ -255,6 +299,7 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
             # When i = 0, all H500 files in df are processed:
             df_NARR_ERC = df_NARR_ERC.append(df_NARR_date)
             print('First df_NARR_ERC concatenation:\n', df_NARR_ERC)
+            print('***************************** Analyzing {} *****************************'.format(d))
         else: # Concat df_NARR_date to rows of df_NARR_ERC
             df_NARR_ERC = pd.concat((df_NARR_ERC, df_NARR_date), axis=0)
             # print('Second df_NARR_ERC concatenation:\n', df_NARR_date)
@@ -476,6 +521,13 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
 
         #df_list = list(df.groupby('time'))
         #print('df_list:\n', df_list)
+
+        # NOTE: Creating a numpy array with data grouped by time.
+        # xt = SYNVAR_3d[j,:,0]
+        # yt = SYNVAR_3d[j,:,1]
+        # zt = SYNVAR_3d[j,:,2]
+        # SYNVAR_3d[time, row, column] where column 0 = lon, 1 = lat, 2 = synvar (H500, PMSL, etc)
+        # SYNVAR_3d[time][row][column]
         SYNVAR_3d = np.array(list(df.groupby('time').apply(pd.DataFrame.to_numpy))) # For some reason to_numpy can be called without () and it works. Why is this allowed?
         print('-------------------------------------------')
         print('SYNVAR_3d[0][10][2]:\n', SYNVAR_3d[0][10][2])
