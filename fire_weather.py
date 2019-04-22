@@ -85,7 +85,7 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
 
     df_gridMET = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
     print('df_gridMET:\n', df_gridMET)
-    df_NARR = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar.pkl')
+    df_NARR = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_plus_gradients.pkl')
     print('df_NARR:\n', df_NARR)
     time_window_hrs = 24 # Average NARR data over 24 hr period to match gridMET
 
@@ -290,7 +290,10 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
             plt.savefig('NARR_gridMET_after_interp.png', bbox_inches='tight')
             plt.show()
 
-        # Add interpolated ERC values to df_NARR_date:
+        # Add interpolated ERC values (contained in list zi) to a new df_NARR_date column.
+        # This is where the merge takes place, no need to align on indices using df.merge().
+        # There are no indices to align on anyways because zi was created with the same lon-lat
+        # order as the NARR data:
         df_NARR_date['ERC'] = zi
         print('df_NARR_date with ERC:\n', df_NARR_date)
 
@@ -319,7 +322,7 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
     return
 
 ''' ------ Import all gridMET CSVs ------ '''
-#merge_NARR_gridMET_csv('1979,1,1','1979,1,12')
+# merge_NARR_gridMET_csv('1979,1,1','1979,1,12')
 ''' ------------------------------------- '''
 
 
@@ -503,7 +506,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
     # print('y values from df_all_synvar index level 1:\n', y)
     # print('t values from df_all_synvar index level 2:\n', t)
 
-
+    df_all_synvar_plus_gradients = pd.DataFrame([])
     df_all_synvar_grid_interp = pd.DataFrame([])
     for i, SYNVAR in enumerate(SYNABBR_shortlist):
         # This loops through all of the synoptic variables (H500, etc)
@@ -522,13 +525,18 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
 
 
         ''' --------------- SYNVAR Tripcolor & Tricontourf: Unevenly spaced grid --------------- '''
+        # # COMMENTING OUT BECAUSE THIS HAS BEEN MOSTLY MOVED INTO THE LOOP CALCULATING GRADIENTS
+        # # BELOW USING SYNVAR_3d DATA.
 
         # Looking at content of df index values:
         datetime_to_plot = datetime(1979,1,1,0,0,0)
         datetime_to_plot_str = datetime_to_plot.strftime('%b %d, %Y')
-        df_datetime = df[(df.index == datetime_to_plot)]#.values.tolist()
+        df_datetime = df[(df.index == datetime_to_plot)]
         print('df_datetime:\n', df_datetime)
 
+        # Used to calculate X gradient. Data is already
+        # ordered such that each data point's neighbor is
+        # east or west of it.
         x_t0 = df_datetime['lon'].values.tolist()
         y_t0 = df_datetime['lat'].values.tolist()
         z_t0 = df_datetime[SYNVAR].values.tolist()
@@ -536,6 +544,8 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         print('Shape y_t0:\n', np.shape(y_t0))
         print('Shape z_t0:\n', np.shape(z_t0))
 
+        # Used to calculate Y gradient. Reshaping the data so that
+        # every data point's neighbor is higher or lower in latitude
         x_t0_2 = np.array(x_t0).reshape((40,40)).T.ravel()
         y_t0_2 = np.array(y_t0).reshape((40,40)).T.ravel()
         z_t0_2 = np.array(z_t0).reshape((40,40)).T.ravel()
@@ -543,119 +553,122 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         print('Shape y_t0_2:\n', np.shape(y_t0_2))
         print('Shape z_t0_2:\n', np.shape(z_t0_2))
 
-        xyz = [[x,y,z] for x,y,z in zip(x_t0_2, y_t0_2, z_t0_2)]
-        df_t0_2 = pd.DataFrame(xyz, columns=['lon','lat','H500'])
-        print('df_t0_2:\n', df_t0_2)
+        # # Checking to make sure the data is reordered:
+        # xyz = [[x,y,z] for x,y,z in zip(x_t0_2, y_t0_2, z_t0_2)]
+        # df_t0_2 = pd.DataFrame(xyz, columns=['lon','lat','H500'])
+        # print('df_t0_2:\n', df_t0_2)
 
-        # Calculating gradients. df_all_synvar currently contains H500, CAPE, PMSL.
-        # print('x_t0:\n', x_t0)
-        # print('y_t0:\n', y_t0)
-        # print('z_t0:\n', z_t0)
+        # # Calculating gradients. df_all_synvar currently contains H500, CAPE, PMSL.
+        # # print('x_t0:\n', x_t0)
+        # # print('y_t0:\n', y_t0)
+        # # print('z_t0:\n', z_t0)
 
-        z_grad_x = np.gradient(z_t0, x_t0)
-        z_grad_y = np.gradient(z_t0, y_t0)
-        print('z_grad_x:\n', z_grad_x[0:30])
-        print('z_grad_y:\n', z_grad_y[0:30])
+        # # Calculating X gradient. Y Gradient (z_grad_y) is incorrect
+        # z_grad_x = np.gradient(z_t0, x_t0)
+        # z_grad_y = np.gradient(z_t0, y_t0)
+        # print('z_grad_x:\n', z_grad_x[0:30])
+        # print('z_grad_y:\n', z_grad_y[0:30])
 
-        z_grad_x_2 = np.gradient(z_t0_2, x_t0_2)
-        z_grad_y_2 = np.gradient(z_t0_2, y_t0_2)
-        print('z_grad_x_2:\n', z_grad_x_2[0:30])
-        print('z_grad_y_2:\n', z_grad_y_2[0:30])
+        # # Calculating Y gradient. X Gradient (z_grad_x_2) is incorrect
+        # z_grad_x_2 = np.gradient(z_t0_2, x_t0_2)
+        # z_grad_y_2 = np.gradient(z_t0_2, y_t0_2)
+        # print('z_grad_x_2:\n', z_grad_x_2[0:30])
+        # print('z_grad_y_2:\n', z_grad_y_2[0:30])
 
-        f, ax = plt.subplots(3,3, figsize=(12,12))
-        ax[0,0].plot(x_t0, y_t0, marker='o', markersize=0.5, linewidth=0.1)
-        ax[0,1].plot(x_t0, z_t0, marker='o', markersize=0.5, linewidth=0.1)
-        ax[0,2].plot(y_t0, z_t0, marker='o', markersize=0.5, linewidth=0.1)
+        # f, ax = plt.subplots(3,3, figsize=(12,12))
+        # ax[0,0].plot(x_t0, y_t0, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[0,1].plot(x_t0, z_t0, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[0,2].plot(y_t0, z_t0, marker='o', markersize=0.5, linewidth=0.1)
 
-        ax[1,0].plot(x_t0, z_grad_x, marker='o', markersize=0.5, linewidth=0.1)
-        ax[1,1].plot(y_t0, z_grad_x, marker='o', markersize=0.5, linewidth=0.1)
-        ax[1,2].plot(z_t0, z_grad_x, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[1,0].plot(x_t0, z_grad_x, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[1,1].plot(y_t0, z_grad_x, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[1,2].plot(z_t0, z_grad_x, marker='o', markersize=0.5, linewidth=0.1)
 
-        ax[2,0].plot(x_t0, z_grad_y, marker='o', markersize=0.5, linewidth=0.1)
-        ax[2,1].plot(y_t0, z_grad_y, marker='o', markersize=0.5, linewidth=0.1)
-        ax[2,2].plot(z_t0, z_grad_y, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[2,0].plot(x_t0, z_grad_y, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[2,1].plot(y_t0, z_grad_y, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[2,2].plot(z_t0, z_grad_y, marker='o', markersize=0.5, linewidth=0.1)
 
-        ax[0,0].set_title('y_t0 vs x_t0')
-        ax[0,1].set_title('z_t0 vs x_t0')
-        ax[0,2].set_title('z_t0 vs y_t0')
-        ax[1,0].set_title('z_grad_x vs x_t0')
-        ax[1,1].set_title('z_grad_x vs y_t0')
-        ax[1,2].set_title('z_grad_x vs z_t0')
-        ax[2,0].set_title('z_grad_y vs x_t0')
-        ax[2,1].set_title('z_grad_y vs y_t0')
-        ax[2,2].set_title('z_grad_y vs z_t0')
+        # ax[0,0].set_title('y_t0 vs x_t0')
+        # ax[0,1].set_title('z_t0 vs x_t0')
+        # ax[0,2].set_title('z_t0 vs y_t0')
+        # ax[1,0].set_title('z_grad_x vs x_t0')
+        # ax[1,1].set_title('z_grad_x vs y_t0')
+        # ax[1,2].set_title('z_grad_x vs z_t0')
+        # ax[2,0].set_title('z_grad_y vs x_t0')
+        # ax[2,1].set_title('z_grad_y vs y_t0')
+        # ax[2,2].set_title('z_grad_y vs z_t0')
 
-        plt.show()
+        # plt.show()
 
-        f, ax = plt.subplots(3,3, figsize=(12,12))
-        ax[0,0].plot(x_t0_2, y_t0_2, marker='o', markersize=0.5, linewidth=0.1)
-        ax[0,1].plot(x_t0_2, z_t0_2, marker='o', markersize=0.5, linewidth=0.1)
-        ax[0,2].plot(y_t0_2, z_t0_2, marker='o', markersize=0.5, linewidth=0.1)
+        # f, ax = plt.subplots(3,3, figsize=(12,12))
+        # ax[0,0].plot(x_t0_2, y_t0_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[0,1].plot(x_t0_2, z_t0_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[0,2].plot(y_t0_2, z_t0_2, marker='o', markersize=0.5, linewidth=0.1)
 
-        ax[1,0].plot(x_t0_2, z_grad_x_2, marker='o', markersize=0.5, linewidth=0.1)
-        ax[1,1].plot(y_t0_2, z_grad_x_2, marker='o', markersize=0.5, linewidth=0.1)
-        ax[1,2].plot(z_t0_2, z_grad_x_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[1,0].plot(x_t0_2, z_grad_x_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[1,1].plot(y_t0_2, z_grad_x_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[1,2].plot(z_t0_2, z_grad_x_2, marker='o', markersize=0.5, linewidth=0.1)
 
-        ax[2,0].plot(x_t0_2, z_grad_y_2, marker='o', markersize=0.5, linewidth=0.1)
-        ax[2,1].plot(y_t0_2, z_grad_y_2, marker='o', markersize=0.5, linewidth=0.1)
-        ax[2,2].plot(z_t0_2, z_grad_y_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[2,0].plot(x_t0_2, z_grad_y_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[2,1].plot(y_t0_2, z_grad_y_2, marker='o', markersize=0.5, linewidth=0.1)
+        # ax[2,2].plot(z_t0_2, z_grad_y_2, marker='o', markersize=0.5, linewidth=0.1)
 
-        ax[0,0].set_title('y_t0_2 vs x_t0_2')
-        ax[0,1].set_title('z_t0_2 vs x_t0_2')
-        ax[0,2].set_title('z_t0_2 vs y_t0_2')
-        ax[1,0].set_title('z_grad_x_2 vs x_t0_2')
-        ax[1,1].set_title('z_grad_x_2 vs y_t0_2')
-        ax[1,2].set_title('z_grad_x_2 vs z_t0_2')
-        ax[2,0].set_title('z_grad_y_2 vs x_t0_2')
-        ax[2,1].set_title('z_grad_y_2 vs y_t0_2')
-        ax[2,2].set_title('z_grad_y_2 vs z_t0_2')
+        # ax[0,0].set_title('y_t0_2 vs x_t0_2')
+        # ax[0,1].set_title('z_t0_2 vs x_t0_2')
+        # ax[0,2].set_title('z_t0_2 vs y_t0_2')
+        # ax[1,0].set_title('z_grad_x_2 vs x_t0_2')
+        # ax[1,1].set_title('z_grad_x_2 vs y_t0_2')
+        # ax[1,2].set_title('z_grad_x_2 vs z_t0_2')
+        # ax[2,0].set_title('z_grad_y_2 vs x_t0_2')
+        # ax[2,1].set_title('z_grad_y_2 vs y_t0_2')
+        # ax[2,2].set_title('z_grad_y_2 vs z_t0_2')
 
-        plt.show()
-
-
-        '''--------------- SYNVAR Contour Plots ---------------'''
-        print('\n')
-        print('******************************************************')
-        print('Plotting SYNVAR Values:')
-        f, ax = plt.subplots(1,2, figsize=(9,4), sharex=True, sharey=True)
-        ax[0].tripcolor(x_t0,y_t0,z_t0,20,cmap=cm.jet) # Use to use this: (x,y,z,20)
-        tcf = ax[1].tricontourf(x_t0,y_t0,z_t0,20, cmap=cm.jet) # 20 contour levels is good quality
-        f.colorbar(tcf)
-
-        ax[0].plot(x_t0,y_t0, 'ko ', markersize=1) # Used to use this: (x,y, 'ko ', markersize=1)
-        ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
-        ax[1].plot(x_t0,y_t0, 'ko ', markersize=1)
-        ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
-
-        plt.suptitle('Contour Plots: '+SYNVAR+' ('+datetime_to_plot_str+')')
-
-        plt.savefig(SYNVAR+'_contour_plots.png')
-        plt.show()
+        # plt.show()
 
 
-        '''--------------- SYNVAR Gradient Contour Plots ---------------'''
-        print('\n')
-        print('******************************************************')
-        print('Plotting SYNVAR X and Y Gradients:')
-        f, ax = plt.subplots(1,2, figsize=(9,4), sharex=True, sharey=True)
-        ax[0].tricontourf(x_t0,y_t0,z_grad_x,20,cmap=cm.jet) # Use to use this: (x,y,z,20)
-        tcf = ax[1].tricontourf(x_t0,y_t0,z_grad_y,20, cmap=cm.jet) # 20 contour levels is good quality
-        f.colorbar(tcf)
+        # '''--------------- SYNVAR Contour Plots ---------------'''
+        # print('\n')
+        # print('******************************************************')
+        # print('Plotting SYNVAR Values:')
+        # f, ax = plt.subplots(1,2, figsize=(9,4), sharex=True, sharey=True)
+        # ax[0].tripcolor(x_t0,y_t0,z_t0,20,cmap=cm.jet) # Use to use this: (x,y,z,20)
+        # tcf = ax[1].tricontourf(x_t0,y_t0,z_t0,20, cmap=cm.jet) # 20 contour levels is good quality
+        # f.colorbar(tcf)
 
-        ax[0].plot(x_t0,y_t0, 'ko ', markersize=1)
-        ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
-        # title_str = SYNVAR+' X Gradient'
-        # print('title_str:', title_str)
-        ax[0].set_title(SYNVAR+' X Gradient')
+        # ax[0].plot(x_t0,y_t0, 'ko ', markersize=1) # Used to use this: (x,y, 'ko ', markersize=1)
+        # ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+        # ax[1].plot(x_t0,y_t0, 'ko ', markersize=1)
+        # ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
 
-        ax[1].plot(x_t0,y_t0, 'ko ', markersize=1)
-        ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
-        # title_str = SYNVAR+' Y Gradient'
-        ax[1].set_title(SYNVAR+' Y Gradient')
+        # plt.suptitle('Contour Plots: '+SYNVAR+' ('+datetime_to_plot_str+')')
 
-        plt.suptitle('Contour Plots: '+SYNVAR+' X and Y Gradients'+' ('+datetime_to_plot_str+')')
-        plt.savefig(SYNVAR+'_contour_plots_gradient.png')
-        plt.show()
+        # plt.savefig(SYNVAR+'_contour_plots.png')
+        # plt.show()
+
+
+        # '''--------------- SYNVAR Gradient Contour Plots ---------------'''
+        # print('\n')
+        # print('******************************************************')
+        # print('Plotting SYNVAR X and Y Gradients:')
+        # f, ax = plt.subplots(1,2, figsize=(9,4), sharex=True, sharey=True)
+        # ax[0].tricontourf(x_t0,y_t0,z_grad_x,20,cmap=cm.jet) # Use to use this: (x,y,z,20)
+        # tcf = ax[1].tricontourf(x_t0_2,y_t0_2,z_grad_y_2,20, cmap=cm.jet) # 20 contour levels is good quality
+        # f.colorbar(tcf)
+
+        # ax[0].plot(x_t0,y_t0, 'ko ', markersize=1)
+        # ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+        # # title_str = SYNVAR+' X Gradient'
+        # # print('title_str:', title_str)
+        # ax[0].set_title(SYNVAR+' X Gradient')
+
+        # ax[1].plot(x_t0_2,y_t0_2, 'ko ', markersize=1)
+        # ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+        # # title_str = SYNVAR+' Y Gradient'
+        # ax[1].set_title(SYNVAR+' Y Gradient')
+
+        # plt.suptitle('Contour Plots: '+SYNVAR+' X and Y Gradients'+' ('+datetime_to_plot_str+')')
+        # plt.savefig(SYNVAR+'_contour_plots_gradient.png')
+        # plt.show()
 
 
         # NOTE: The code below creates a numpy array with data grouped by time.
@@ -664,6 +677,11 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         # zt = SYNVAR_3d[j,:,2]
         # SYNVAR_3d[time, row, column] where column 0 = lon, 1 = lat, 2 = synvar (H500, PMSL, etc)
         # SYNVAR_3d[time][row][column]
+        # SYNVAR_datetimes is used in the loop below to iterate through the layers of SYNVAR_3d
+        SYNVAR_all_datetimes = df.index.tolist()
+        # print('SYNVAR_all_datetimes:\n', SYNVAR_all_datetimes)
+        SYNVAR_datetimes = df.index.unique()
+        print('SYNVAR_datetimes:\n', SYNVAR_datetimes)
         SYNVAR_3d = np.array(list(df.groupby('time').apply(pd.DataFrame.to_numpy))) # For some reason to_numpy can be called without () and it works. Why is this allowed?
         print('-------------------------------------------')
         print('SYNVAR_3d[0][10][2]:\n', SYNVAR_3d[0][10][2])
@@ -836,10 +854,34 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
 
         # iterate through every x,y grid, differs for every datetime stamp
 
+        # Setting up arrays to fill with gradient data calculated inside loop
+        # dates, rows, cols  = np.shape(SYNVAR_3d)
+        # zt_grad_x_arr = np.zeros((dates*rows,1))
+        # zt_grad_y_2_arr = np.zeros((dates*rows,1))
+
+        # Empty lists for X gradient:
+        xt_all = []
+        yt_all = []
+        zt_all = []
+        zt_grad_x_all = []
+        # Empty lists for Y gradient:
+        xt2_all = []
+        yt2_all = []
+        zt2_all = []
+        zt_grad_y_all = []
+
+
         z_min_list = []; z_max_list = []
         z_grad_x_min_list = []; z_grad_x_max_list = []; z_grad_y_min_list = []; z_grad_y_max_list = []
         layers, row, cols = np.shape(SYNVAR_3d)
-        for j in range(0,layers): # Step through Zi-layers
+        layer_num_list = list(range(0,layers))
+        for j, dt in zip(layer_num_list, SYNVAR_datetimes): # Step through Zi-layers
+            # This loop is inside of the SYNVAR loop above, meaning
+            # this loop iterates through all layers of one specific
+            # synoptic variable, such as H500, at a time.
+            print('*********************** Analyzing datetime :\n', dt)
+            datetime_to_plot_str = dt.strftime('%b %d, %Y')
+            print('SYNVAR_3d datetime_to_plot_str:', datetime_to_plot_str)
             # SYNVAR_3d[datetime:row:column]
             # jth time point
             # all rows within jth timepoint
@@ -847,6 +889,108 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
             xt = SYNVAR_3d[j,:,0]
             yt = SYNVAR_3d[j,:,1]
             zt = SYNVAR_3d[j,:,2]
+            print('xt:\n', xt)
+            print('yt:\n', yt)
+            print('zt:\n', zt)
+
+            ''' ******************************** Calculating Gradients On Original NARR Data ******************************** '''
+
+            # Used to calculate Y gradient. Reshaping the data so that
+            # every data point's neighbor is higher or lower in latitude
+            xt2 = np.array(xt).reshape((40,40)).T.ravel()
+            yt2 = np.array(yt).reshape((40,40)).T.ravel()
+            zt2 = np.array(zt).reshape((40,40)).T.ravel()
+            print('Shape xt2:\n', np.shape(xt2))
+            print('Shape yt2:\n', np.shape(yt2))
+            print('Shape zt2:\n', np.shape(zt2))
+
+            # Checking to make sure the data is reordered:
+            xyz = [[x,y,z] for x,y,z in zip(xt2, yt2, zt2)]
+            dft2 = pd.DataFrame(xyz, columns=['lon','lat', SYNVAR])
+            print('dft2:\n', dft2)
+
+            # Calculating gradients. df_all_synvar currently contains H500, CAPE, PMSL.
+            # print('x_t0:\n', x_t0)
+            # print('y_t0:\n', y_t0)
+            # print('z_t0:\n', z_t0)
+
+            # Calculating X gradient. Y Gradient (zt_grad_y) is incorrect
+            zt_grad_x = np.gradient(zt, xt)
+            zt_grad_y = np.gradient(zt, yt)
+            print('zt_grad_x:\n', zt_grad_x[0:30])
+            print('zt_grad_y:\n', zt_grad_y[0:30])
+
+            # Calculating Y gradient. X Gradient (zt_grad_x_2) is incorrect
+            zt_grad_x_2 = np.gradient(zt2, xt2)
+            zt_grad_y_2 = np.gradient(zt2, yt2)
+            print('zt_grad_x_2:\n', zt_grad_x_2[0:30])
+            print('zt_grad_y_2:\n', zt_grad_y_2[0:30])
+
+            if j == layer_num_list[-1]:
+                # If the loop is on its last layer (last date) then
+                # create and save some contour plots.
+
+                #******************************** Synvar Contour Plots:
+                print('\n')
+                print('******************************************************')
+                print('Plotting SYNVAR Values:')
+                f, ax = plt.subplots(1,2, figsize=(9,4), sharex=True, sharey=True)
+                ax[0].tripcolor(xt,yt,zt,20,cmap=cm.jet) # Use to use this: (x,y,z,20)
+                tcf = ax[1].tricontourf(xt,yt,zt,20, cmap=cm.jet) # 20 contour levels is good quality
+                f.colorbar(tcf)
+
+                ax[0].plot(xt,yt, 'ko ', markersize=1) # Used to use this: (x,y, 'ko ', markersize=1)
+                ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+                ax[1].plot(xt,yt, 'ko ', markersize=1)
+                ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+
+                plt.suptitle('Contour Plots: '+SYNVAR+' ('+datetime_to_plot_str+')')
+
+                # plt.savefig(SYNVAR+'_contour_plots.png')
+                plt.show()
+
+
+                #****************************** Synvar Gradient Contour Plots:
+                print('\n')
+                print('******************************************************')
+                print('Plotting SYNVAR X and Y Gradients:')
+                f, ax = plt.subplots(1,2, figsize=(9,4), sharex=True, sharey=True)
+                ax[0].tricontourf(xt,yt,zt_grad_x,20,cmap=cm.jet) # Use to use this: (x,y,z,20)
+                tcf = ax[1].tricontourf(xt2,yt2,zt_grad_y_2,20, cmap=cm.jet) # 20 contour levels is good quality
+                f.colorbar(tcf)
+
+                ax[0].plot(xt,yt, 'ko ', markersize=1)
+                ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+                # title_str = SYNVAR+' X Gradient'
+                # print('title_str:', title_str)
+                ax[0].set_title(SYNVAR+' X Gradient')
+
+                ax[1].plot(xt2,yt2, 'ko ', markersize=1)
+                ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+                # title_str = SYNVAR+' Y Gradient'
+                ax[1].set_title(SYNVAR+' Y Gradient')
+
+                plt.suptitle('Contour Plots: '+SYNVAR+' X and Y Gradients'+' ('+datetime_to_plot_str+')')
+                # plt.savefig(SYNVAR+'_contour_plots_gradient.png')
+                plt.show()
+
+            zt_grad_x_shape = np.shape(zt_grad_x)
+            zt_grad_y_2_shape = np.shape(zt_grad_y_2)
+            print('zt_grad_x_shape:\n', zt_grad_x_shape)
+            print('zt_grad_y_2_shape:\n', zt_grad_y_2_shape)
+
+            # Writing the gradients and their coordinates for original NARR grid to a list
+            xt_all.extend(xt)
+            yt_all.extend(yt)
+            zt_all.extend(zt)
+            zt_grad_x_all.extend(zt_grad_x)
+
+            xt2_all.extend(xt2)
+            yt2_all.extend(yt2)
+            zt2_all.extend(zt2)
+            zt_grad_y_all.extend(zt_grad_y_2)
+
+
             xt_yt = np.c_[xt,yt]
 
             # --- Array shapes:
@@ -869,6 +1013,69 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
             z_grad_x_max_list.append(np.nanmax(Zi_grad_x[:,:,j]))
             z_grad_y_min_list.append(np.nanmin(Zi_grad_y[:,:,j]))
             z_grad_y_max_list.append(np.nanmax(Zi_grad_y[:,:,j]))
+
+        print('zt_grad_x_all[0:100]:\n', zt_grad_x_all[0:100])
+        print('zt_grad_y_all[0:100]:\n', zt_grad_y_all[0:100])
+
+        # Convert X gradient related lists to numpy arrays:
+        xt_all_arr = np.array(xt_all)
+        yt_all_arr = np.array(yt_all)
+        zt_all_arr = np.array(zt_all)
+        zt_grad_x_all_arr = np.array(zt_grad_x_all)
+        
+        # Convert Y gradient related lists to numpy arrays:
+        xt2_all_arr = np.array(xt2_all)
+        yt2_all_arr = np.array(yt2_all)
+        zt2_all_arr = np.array(zt2_all)
+        zt_grad_y_all_arr = np.array(zt_grad_y_all)
+
+        t_all_arr = np.array(SYNVAR_all_datetimes)
+        print('shape of t_all_arr:\n', np.shape(t_all_arr)) # Should be correct size
+        print('shape of xt_all:\n', np.shape(xt_all))
+        print('shape of yt_all:\n', np.shape(yt_all))
+        print('shape of zt_all:\n', np.shape(zt_all))
+        print('shape of zt_grad_x_all:\n', np.shape(zt_grad_x_all_arr)) # Should be correct size
+        print('shape of zt_grad_y_all:\n', np.shape(zt_grad_y_all_arr)) # Should be correct size
+
+        # NEED TO APPEND ALL xt, yt, zt data to their own lists
+        arr_grad_x = np.column_stack((xt_all, yt_all, t_all_arr, zt_all,  zt_grad_x_all_arr)) # Contains H500 and H500 Grad X
+        arr_grad_y = np.column_stack((xt2_all, yt2_all, t_all_arr,  zt_grad_y_all_arr)) # Contains H500 Grad Y with different x,y pair ordering
+        cols_x = ['lon','lat','time',SYNVAR,SYNVAR+' Grad X']
+        cols_y = ['lon','lat','time',SYNVAR+' Grad Y']
+        # Make dataframes from data
+        df_x = pd.DataFrame(data=arr_grad_x, columns=cols_x)
+        df_y = pd.DataFrame(data=arr_grad_y, columns=cols_y)
+        print('df_x:\n', df_x.head())
+        print('df_y:\n', df_y.head())
+        # Set indices before using indices to merge
+        df_x.set_index(['lon','lat','time'], inplace=True)
+        df_y.set_index(['lon','lat','time'], inplace=True)
+        print('df_x after setting index to lon lat time:\n', df_x.head())
+        print('df_y after setting index to lon lat time:\n', df_y.head())
+        print('verifying df_x["time"] index is in datetime format:\n', df_x.index.levels[2])
+
+       
+        # Merge df_x and df_y:
+        # Left and right indices are set to True to merge on both.
+        # how = 'Left' to retain the order of the left indices (df_x indices) while
+        # the right indices (df_y indices) are sorted according to left indices.
+        # This is done because df_y's order may be different after reordering xt, yt
+        # and zt to create xt2, yt2 and zt2 to calculate the Y gradient (zt_grad_y_2)
+        # in the loop above.
+        df_synvar_plus_gradients = df_x.merge(df_y, how='left', left_index=True, right_index=True)
+        print('df_synvar_plus_gradients:\n', df_synvar_plus_gradients)
+
+        if i == 1:
+            df_all_synvar_plus_gradients = df_all_synvar_plus_gradients.append(df_synvar_plus_gradients)
+        else:
+            df_all_synvar_plus_gradients = pd.concat((df_all_synvar_plus_gradients, df_synvar_plus_gradients), axis=1, join='inner')
+
+        print('df_all_synvar_plus_gradients:\n', df_all_synvar_plus_gradients)
+
+
+
+        ''' The code below is for the animation using NARR data interpolated to a regular grid.
+            The data isn't for ML training purposes. '''
 
         # Array shapes:
         print('(xt,yt) shape:', np.shape((xt,yt)))
@@ -921,7 +1128,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         #df_synvar_grid_interp.sort_index(level=2, inplace=True)
         print('df_synvar_grid_interp sorted by time:\n', df_synvar_grid_interp)
 
-        '''--------------- IF THERE'S A WAY TO REWRITE THIS SECTOIN WITHOUT LOOP, IT SHOULD BE DONE: ---------------'''
+        '''--------------- IF THERE'S A WAY TO REWRITE THIS SECTION WITHOUT LOOP, IT SHOULD BE DONE: ---------------'''
         # This loop may not be necessary. As an alternative, appending all
         # df_synvar_grid_interp dataframes to a list called 'df_synvar_grid_interp_list',
         # then when i == len(SYNABBR_shortlist)-1,
@@ -937,27 +1144,27 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         print('df_all_synvar_grid_interp:\n', df_all_synvar_grid_interp)
         '''---------------------------------------------------------------------------------------------------------'''
 
-        # Used to set 3D animation vertical range:
-        Z_min = int(np.nanmin(Zi[:,:,:]))
-        Z_max = int(np.nanmax(Zi[:,:,:]))
-        Z_grad_x_min = int(np.nanmin(Zi_grad_x[:,:,:]))
-        Z_grad_x_max = int(np.nanmax(Zi_grad_x[:,:,:]))
-        Z_grad_y_min = int(np.nanmin(Zi_grad_y[:,:,:]))
-        Z_grad_y_max = int(np.nanmax(Zi_grad_y[:,:,:]))
+        # # Used to set 3D animation vertical range:
+        # Z_min = int(np.nanmin(Zi[:,:,:]))
+        # Z_max = int(np.nanmax(Zi[:,:,:]))
+        # Z_grad_x_min = int(np.nanmin(Zi_grad_x[:,:,:]))
+        # Z_grad_x_max = int(np.nanmax(Zi_grad_x[:,:,:]))
+        # Z_grad_y_min = int(np.nanmin(Zi_grad_y[:,:,:]))
+        # Z_grad_y_max = int(np.nanmax(Zi_grad_y[:,:,:]))
 
-        #plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
-        print('*********************** Plotting surface of Xi, Yi, Zi_grad_x')
-        plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=True, color='0.75', rstride=1, cstride=1)]
+        # #plot = [ax.plot_surface(x, y, zarray[:,:,0], color='0.75', rstride=1, cstride=1)]
+        # print('*********************** Plotting surface of Xi, Yi, Zi_grad_x')
+        # plot = [ax.plot_surface(Xi, Yi, Zi_grad_x[:,:,0], vmin=Z_min, vmax=Z_max, linewidth=0, antialiased=True, color='0.75', rstride=1, cstride=1)]
 
-        ax.set_zlim(Z_min, Z_max)
-        ax.zaxis.set_major_locator(LinearLocator(6))
-        ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
-        ax.set_xlabel('Longitude')
-        ax.set_ylabel('Latitude')
-        ax.set_zlabel(SYNVAR+': X gradient')
-        # Color bar which maps values to colors:
-        #fig.colorbar(surf, shrink=0.5, aspect=5)
-        # NEED THIS BUT NOT WORKING: fig.colorbar(plot, shrink=0.5, aspect=5)
+        # ax.set_zlim(Z_min, Z_max)
+        # ax.zaxis.set_major_locator(LinearLocator(6))
+        # ax.zaxis.set_major_formatter(FormatStrFormatter('%d'))
+        # ax.set_xlabel('Longitude')
+        # ax.set_ylabel('Latitude')
+        # ax.set_zlabel(SYNVAR+': X gradient')
+        # # Color bar which maps values to colors:
+        # #fig.colorbar(surf, shrink=0.5, aspect=5)
+        # # NEED THIS BUT NOT WORKING: fig.colorbar(plot, shrink=0.5, aspect=5)
 
         ''' --- Animation parameters --- '''
         # #---Set animation figure parameters:
@@ -981,13 +1188,32 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         # plt.show() # Animation is saved by the time it shows up.
         ''' --------------------------- '''
 
-    # Pickle out:
-    print('df_all_synvar_grid_interp.columns:\n', df_all_synvar_grid_interp.columns)
-    df_all_synvar_grid_interp_pkl = df_all_synvar_grid_interp.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_grid_interp.pkl')
+    # Drop non-gradient data for H500 and PMSL, and CAPE gradients:
+    # Pressure gradients, not the pressures themselves, drive surface level winds and contribute to fire weather.
+    # CAPE levels, not gradients, drive thunderstorm activity associated with fire ignition.
+    df_all_synvar_plus_gradients.drop(columns=['H500', 'PMSL', 'CAPE Grad X', 'CAPE Grad Y'], inplace=True)
+    df_all_synvar_grid_interp.drop(columns=['H500', 'PMSL', 'CAPE Grad X', 'CAPE Grad Y'], inplace=True)
+    # Verify columns have been removed:
+    print('df_all_synvar_plus_gradients:\n', df_all_synvar_plus_gradients.head())
+    print('df_all_synvar_grid_interp:\n', df_all_synvar_grid_interp.head())
 
-    # df with only the columns desired. Gradients for CAPE are being dropped.
-    # Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
-    df_chosen = df_all_synvar_grid_interp.drop(columns=['CAPE Grad X', 'CAPE Grad Y'])
+    # Export paths:
+    export_pickle_dir = '/home/dp/Documents/FWP/NARR/pickle/'
+    export_csv_dir = '/home/dp/Documents/FWP/NARR/csv/'
+
+    # Pickle out:
+    print('Exporting to Pickle...')
+    print('df_all_synvar_plus_gradients.columns:\n', df_all_synvar_plus_gradients.columns)
+    print('df_all_synvar_grid_interp.columns:\n', df_all_synvar_grid_interp.columns)
+    df_all_synvar_plus_gradients_pkl = df_all_synvar_plus_gradients.to_pickle(export_pickle_dir + 'df_all_synvar_plus_gradients.pkl')
+    df_all_synvar_grid_interp_pkl = df_all_synvar_grid_interp.to_pickle(export_pickle_dir + 'df_all_synvar_grid_interp.pkl')
+
+    # Export to csv:
+    print('Exporting to CSV... (This could take a minute) ******************************')
+    df_all_synvar_plus_gradients.to_csv(export_csv_dir + 'df_all_synvar_plus_gradients.csv', index=True, header=True)
+    df_all_synvar_grid_interp.to_csv(export_csv_dir + 'df_all_synvar_grid_interp.csv', index=True, header=True)
+
+    # NOTE: Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
 
     return
 
