@@ -174,7 +174,6 @@ def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max
         df_NARR_time_range.set_index(['lon','lat','time'], inplace=True)
         print('df_NARR_time_range after setting index to lon, lat, time:\n', df_NARR_time_range)
         print('df_NARR_time_range.loc[-126.956]:\n', df_NARR_time_range.loc[-124.500,48.3277])#,datetime(1979,1,1,0,0,0)]['H500 Grad Y'])
-        return
         df_NARR_time_avg = df_NARR_time_range.groupby(['lon','lat']).mean()
         print('df_NARR_time_avg before assigning day D to time column:\n', df_NARR_time_avg)
         df_NARR_time_avg['time'] = D
@@ -324,7 +323,10 @@ def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max
             # print('df_NARR_date.columns:\n', df_NARR_date.columns)
             print('***************************** Analyzing {} *****************************'.format(d))
 
-
+    # Getting lon, lat, time all on the left hand side so order is correct in the
+    # csv for Julia import
+    df_NARR_ERC.set_index(['lon','lat','time'], inplace=True)
+    df_NARR_ERC.reset_index(inplace=True)
     # Remove invalid values:
     # print('df_NARR rows before rounding ERC:\n', df_NARR_ERC.count())
     df_NARR_ERC = df_NARR_ERC[df_NARR_ERC['ERC'] > 0]
@@ -371,14 +373,15 @@ def plot_NARR_ERC(ERC_date):
     # work when there are multiple dates.
     x = df_NARR_ERC.lon.values.tolist()     # Longitude
     y = df_NARR_ERC.lat.values.tolist()     # Latitude
-    t = df_NARR_ERC.time.values.tolist()    # Time
-    # print('x values from df_NARR_ERC.lon:\n', x)
-    # print('y values from df_NARR_ERC.lat:\n', y)
-    # print('t values from df_NARR_ERC.time:\n', t)
+    t = df_NARR_ERC.time.tolist()    # Time
+    print('x values from df_NARR_ERC.lon:\n', x)
+    print('y values from df_NARR_ERC.lat:\n', y)
+    print('t values from df_NARR_ERC.time:\n', t)
 
     # Getting z values and building new dataframe with time index and ERC data.
     z = df_NARR_ERC['ERC'].values.tolist()
     d = [i for i in zip(t,x,y,z)]
+    print('d:\n', d)
     df = pd.DataFrame(data=d, columns=['time','lon','lat','ERC'])
     df.set_index('time', inplace=True)
     print('df.index:\n', df.index)
@@ -386,7 +389,6 @@ def plot_NARR_ERC(ERC_date):
 
     # Convert timepoint to build contour plot from ERC data
     ERC_date = datetime.strptime(ERC_date, '%Y,%m,%d')
-    ERC_date = datetime.date(ERC_date)
     print('ERC_date:', ERC_date)
     # Get the ERC data for the day specified
     df_t0 = df[(df.index == ERC_date)]
@@ -1277,7 +1279,7 @@ def synvarPickleToCSV(pickle_in_filename, csv_out_filename, cols_list):
 ''' ----------------------------------- '''
 
 ''' ------ Import all gridMET CSVs ------ '''
-merge_NARR_gridMET('1979,1,1','1979,1,12')
+# merge_NARR_gridMET('1979,1,1','1979,1,12')
 ''' ------------------------------------- '''
 
 ''' ------ Import all gridMET CSVs ------ '''
