@@ -66,11 +66,8 @@ def import_gridMET_csv():
 
     return
 
-''' ------ Import all gridMET CSVs ------ '''
-# import_gridMET_csv()
-''' ------------------------------------- '''
 
-def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat_max):
+def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max):
     # Imports df_erc and df_all_synvar pickle files, converts to dataframes,
     # sets index of each to time column, aggregates NARR data from 3hrs
     # to 24hrs to match 24 hour ERC data.
@@ -134,6 +131,10 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
 
     # Setting the index to time to select all data in a particular time range before
     # grouping on longitude:
+    # Selecting a time range is easier with one index. Using a multiindex requires
+    # knowing the "coordinates" of the index, e.g. .loc[(first lon, first lat, first time):(last lon, lat lat, last time)]
+    # I don't know first and last lon and lat but could get them. Alternatively, just use time index then reset to
+    # lon lat time index later.
     df_NARR.set_index('time', inplace=True)
 
     # time_range_list is a list of tuples of times:
@@ -154,16 +155,31 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
         #     print(group)
         # df_NARR_time_avg = df_NARR_time_range.groupby('lon').mean()
         
+        # time range start and end
         tr_start = tr[0]
         tr_end = tr[1]
+        # lon lat range
+
 
         D = datetime.date(tr_end) # NARR date associated with gridMET date
 
         # Average time across range, assign a date column to specify date
-        df_NARR_time_avg = df_NARR.loc[tr_start:tr_end].groupby('lon').mean()
-        df_NARR_time_avg['time'] = D
-        print('df_NARR_time_avg:\n', df_NARR_time_avg)
+        df_NARR_time_range = df_NARR.loc[tr_start:tr_end]
+        print('df_NARR_time_range:\n', df_NARR_time_range)
 
+        df_NARR_time_range.reset_index(inplace=True)
+        cols = df_NARR_time_range.columns
+        df_NARR_time_range[['lon','lat','H500 Grad X','H500 Grad Y','PMSL Grad X','PMSL Grad Y','CAPE']] = df_NARR_time_range[['lon','lat','H500 Grad X','H500 Grad Y','PMSL Grad X','PMSL Grad Y','CAPE']].apply(pd.to_numeric)
+        print('df_NARR_time_range after resetting index:\n', df_NARR_time_range)
+        df_NARR_time_range.set_index(['lon','lat','time'], inplace=True)
+        print('df_NARR_time_range after setting index to lon, lat, time:\n', df_NARR_time_range)
+        print('df_NARR_time_range.loc[-126.956]:\n', df_NARR_time_range.loc[-124.500,48.3277])#,datetime(1979,1,1,0,0,0)]['H500 Grad Y'])
+        return
+        df_NARR_time_avg = df_NARR_time_range.groupby(['lon','lat']).mean()
+        print('df_NARR_time_avg before assigning day D to time column:\n', df_NARR_time_avg)
+        df_NARR_time_avg['time'] = D
+        print('df_NARR_time_avg after assigning day D to time column:\n', df_NARR_time_avg)
+        
         if i == 0: # First time through loop, append df_NARR_date to columns
             # When i = 0, all H500 files in df are processed:
             df_NARR_all_time_avg = df_NARR_all_time_avg.append(df_NARR_time_avg)
@@ -314,16 +330,33 @@ def merge_NARR_gridMET_csv(start_date, end_date):#lon_min, lon_max, lat_min, lat
     df_NARR_ERC = df_NARR_ERC[df_NARR_ERC['ERC'] > 0]
     # print('df_NARR_ERC rows after rounding ERC:\n', df_NARR_ERC.count())
     df_NARR_ERC = df_NARR_ERC.round({'ERC':0})
-    print('df_NARR_ERC rows after rounding ERC and removing invalid values:\n', df_NARR_ERC)
+    print('df_NARR_ERC rows after rounding ERC to nearest integer and removing invalid values:\n', df_NARR_ERC)
+    # erc_levels = {'low':(0,19),\
+    #                 'moderate':(19,27),\
+    #                 'high':(27,35),\
+    #                 'very high':(33,44),\
+    #                 'extreme':(44,100)}
+    # print('erc_levels:\n', erc_levels)
+    
+    erc_bins = [-1,19,27,35,44,500]
+    erc_labels = ['low','moderate','high','very high','extreme']
+    # Cutting returns a series with categorical ERC values
+    s_ERC_categorical = pd.cut(df_NARR_ERC['ERC'], bins=erc_bins, labels=erc_labels)
+    print('s_ERC_categorical:\n', s_ERC_categorical)
+    # Concatenate df_NARR_ERC (minus its ERC data) to the categorical ERC data
+    df_NARR_ERC_categorical = pd.concat((df_NARR_ERC.drop('ERC', axis=1), s_ERC_categorical), axis=1)
+    print('df_NARR_ERC_categorical:\n', df_NARR_ERC_categorical)
 
+    # Export to pickle and csv:
+    print('Exporting continuous and categorical NARR ERC data to pickle and csv... **************************')
     df_NARR_ERC_pkl = df_NARR_ERC.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
     df_NARR_ERC.to_csv('/home/dp/Documents/FWP/NARR/df_NARR_ERC.csv', header=True, index=False) # Includes index columns, names all columns at top of file
-
+    # Export df_NARR_ERC_categorical data to pickle and csv:
+    df_NARR_ERC_categorical_pkl = df_NARR_ERC.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC_categorical.pkl')
+    df_NARR_ERC_categorical.to_csv('/home/dp/Documents/FWP/NARR/df_NARR_ERC_categorical.csv', header=True, index=False) # Includes index columns, names all columns at top of file
+    
     return
 
-''' ------ Import all gridMET CSVs ------ '''
-# merge_NARR_gridMET_csv('1979,1,1','1979,1,12')
-''' ------------------------------------- '''
 
 
 def plot_NARR_ERC(ERC_date):
@@ -367,7 +400,7 @@ def plot_NARR_ERC(ERC_date):
     # print('Shape z_t0:\n', np.shape(z_t0))
 
     plt.close()
-    f, ax = plt.subplots(1,2, figsize=(4,8), sharex=True, sharey=True)
+    f, ax = plt.subplots(1,2, figsize=(8,3), sharex=True, sharey=True)
 
     ax[0].tripcolor(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # Plots across all timepoints?
     ax[0].plot(x_t0, y_t0, 'ko ', markersize=1)
@@ -387,9 +420,7 @@ def plot_NARR_ERC(ERC_date):
     return
 
 
-''' ------ Import all gridMET CSVs ------ '''
-# plot_NARR_ERC('1979,1,12')
-''' ------------------------------------- '''
+
 
 
 ''' --- Import NARR data from csv files and animate it --- '''
@@ -1063,12 +1094,14 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
         # and zt to create xt2, yt2 and zt2 to calculate the Y gradient (zt_grad_y_2)
         # in the loop above.
         df_synvar_plus_gradients = df_x.merge(df_y, how='left', left_index=True, right_index=True)
-        print('df_synvar_plus_gradients:\n', df_synvar_plus_gradients)
+        print('df_synvar_plus_gradients for '+SYNVAR+':\n', df_synvar_plus_gradients)
 
-        if i == 1:
+        if i == 0:
             df_all_synvar_plus_gradients = df_all_synvar_plus_gradients.append(df_synvar_plus_gradients)
+            print('************* df_synvar_plus_gradients for '+SYNVAR+' append:\n', df_synvar_plus_gradients)
         else:
             df_all_synvar_plus_gradients = pd.concat((df_all_synvar_plus_gradients, df_synvar_plus_gradients), axis=1, join='inner')
+            print('************* df_synvar_plus_gradients for '+SYNVAR+' concatenation:\n', df_synvar_plus_gradients)
 
         print('df_all_synvar_plus_gradients:\n', df_all_synvar_plus_gradients)
 
@@ -1208,10 +1241,11 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
     df_all_synvar_plus_gradients_pkl = df_all_synvar_plus_gradients.to_pickle(export_pickle_dir + 'df_all_synvar_plus_gradients.pkl')
     df_all_synvar_grid_interp_pkl = df_all_synvar_grid_interp.to_pickle(export_pickle_dir + 'df_all_synvar_grid_interp.pkl')
 
-    # Export to csv:
-    print('Exporting to CSV... (This could take a minute) ******************************')
-    df_all_synvar_plus_gradients.to_csv(export_csv_dir + 'df_all_synvar_plus_gradients.csv', index=True, header=True)
-    df_all_synvar_grid_interp.to_csv(export_csv_dir + 'df_all_synvar_grid_interp.csv', index=True, header=True)
+    ######## DON'T EXPORT TO CSV BECAUSE ONLY THE PICKLE VERSIONS ARE USED IN merge_NARR_gridMET().
+    # # Export to csv:
+    # print('Exporting to CSV... (This could take a minute) ******************************')
+    # df_all_synvar_plus_gradients.to_csv(export_csv_dir + 'df_all_synvar_plus_gradients.csv', index=True, header=True)
+    # df_all_synvar_grid_interp.to_csv(export_csv_dir + 'df_all_synvar_grid_interp.csv', index=True, header=True)
 
     # NOTE: Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
 
@@ -1230,11 +1264,25 @@ def synvarPickleToCSV(pickle_in_filename, csv_out_filename, cols_list):
     print('Imported pickle as df:\n', df.head())
     # Export df as csv:
     df.to_csv(csv_dir, index=True, header=True) # Includes index columns, names all columns at top of file
+    
     return
 
+
+''' ------ Import all gridMET CSVs ------ '''
+# import_gridMET_csv()
+''' ------------------------------------- '''
+
 ''' --- Run import_csv, synvar_plot --- '''
-import_NARR_csv(-125,-116,41,50)
+# import_NARR_csv(-125,-116,41,50)
 ''' ----------------------------------- '''
+
+''' ------ Import all gridMET CSVs ------ '''
+merge_NARR_gridMET('1979,1,1','1979,1,12')
+''' ------------------------------------- '''
+
+''' ------ Import all gridMET CSVs ------ '''
+plot_NARR_ERC('1979,1,12')
+''' ------------------------------------- '''
 
 ''' --- Run synvarPickleToCSV --- '''
 # synvarPickleToCSV('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_interp.csv',['H500 Grad X'])
