@@ -362,7 +362,11 @@ def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max
 
 
 def plot_NARR_ERC(ERC_date):
-    # This function makes a contour plot containing tripcolour and tricontourf subplots of ERC data.
+    # This function makes the following:
+    # 1)    Contour plot containing tripcolour and tricontourf subplots
+    #       of ERC data on a single date
+    # 2)    Time series of synoptic variable data for a single lon-lat point
+    #       over the dataframe's entire time range
 
     df_NARR_ERC = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
     print('df_NARR with ERC:\n', df_NARR_ERC)
@@ -374,9 +378,9 @@ def plot_NARR_ERC(ERC_date):
     x = df_NARR_ERC.lon.values.tolist()     # Longitude
     y = df_NARR_ERC.lat.values.tolist()     # Latitude
     t = df_NARR_ERC.time.tolist()    # Time
-    print('x values from df_NARR_ERC.lon:\n', x)
-    print('y values from df_NARR_ERC.lat:\n', y)
-    print('t values from df_NARR_ERC.time:\n', t)
+    # print('x values from df_NARR_ERC.lon:\n', x)
+    # print('y values from df_NARR_ERC.lat:\n', y)
+    # print('t values from df_NARR_ERC.time:\n', t)
 
     # Getting z values and building new dataframe with time index and ERC data.
     z = df_NARR_ERC['ERC'].values.tolist()
@@ -419,8 +423,44 @@ def plot_NARR_ERC(ERC_date):
     plt.savefig('ERC_contour.png', bbox_inches='tight')
     plt.show()
 
-    return
+    df_NARR_ERC.reset_index(inplace=True)
+    df_NARR_ERC.set_index('lon', inplace=True)
+    print('df_NARR_ERC with lon index:\n', df_NARR_ERC)
+    # Specifying a longitude point, make this an
+    # actual longitude value in the future:
+    lon = -124.500
+    df_NARR_ERC_lon_lat_time_series = df_NARR_ERC.loc[lon]
+    print('df_NARR_ERC_lon_lat_time_series:\n', df_NARR_ERC_lon_lat_time_series)
+    
+    plt.close()
+    # Plotting three time series of df_NARR_ERC data at a lon-lat time:
+    # 1) H500 X and Y Gradients
+    # 2) PMSL X and Y Gradients 
+    # 3) CAPE
+    # 4) ERC
+    fig, ax = plt.subplots(1,4, figsize=(14,3))
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0], color='k')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0], color='g')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[1], color='gray')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[1], color='m')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='CAPE', ax=ax[2], color='orange')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='ERC', ax=ax[3], color='r')
+    ax[0].set_xlabel('Date')
+    ax[0].set_ylabel('H500 Grad at '+str(lon)+'deg, m/deg')
+    ax[0].set_title('Time Series: H500 Gradients')
+    ax[1].set_xlabel('Date')
+    ax[1].set_ylabel('PMSL Grad at '+str(lon)+'deg, hPa/deg')
+    ax[1].set_title('Time Series: PMSL Gradients')
+    ax[2].set_xlabel('Date')
+    ax[2].set_ylabel('CAPE at '+str(lon)+'deg, kJ/kg')
+    ax[2].set_title('Time Series: CAPE')
+    ax[3].set_xlabel('Date')
+    ax[3].set_ylabel('ERC at '+str(lon)+'deg, AR')
+    ax[3].set_title('Time Series: ERC')
+    plt.show()
 
+
+    return
 
 
 
