@@ -119,8 +119,16 @@ begin
             print("number of csv files made = "+c)
 
             ;---Set csv file name
-            SYNNAME_CSV = tostring(c) + "_" + SYNABBR + ".csv"
-            
+            if(c .lt. 10) then
+                ;--- If c is 0 to 9, add a zero prefix
+                ;--- Resulting names will be 01_H500.csv, 02_H500.csv, etc.
+                ;--- Makes sorting the csv files easier in import_NARR_csv()
+                SYNNAME_CSV = tostring(0) + tostring(c) + "_" + SYNABBR + ".csv"
+            else
+                ;--- If c is >= 10, no need to add a zero prefix
+                SYNNAME_CSV = tostring(c) + "_" + SYNABBR + ".csv"
+            end if
+
             ;---Add directory to csv file name
             csv_filename = cdir + SYNNAME_CSV
             
