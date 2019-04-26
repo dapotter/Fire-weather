@@ -17,31 +17,46 @@ begin
 
 ;~~~~~~~~~~~~~~ ENTER grib1 FILES DIRECTORY HERE ~~~~~~~~~~~~~~~~~
 ;~~~~~~~~~~~~~~  Directory needs to end with /"  ~~~~~~~~~~~~~~~~~
-    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
-    cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
     
+    ;-------  Laptop NARR data directories  -------
+
+    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
+    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
+
+    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/"       ; flx is PMSL: directory Jan 1-3 files
+    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/"
+
     ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/"       ; pbl is CAPE: directory Jan 1-3 files
     ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/"   ; pbl is CAPE: directory June 1-3 files
     
-    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/"       ; flx is PMSL: directory Jan 1-3 files
-    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/"
-    
     ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of vars: directory Jan 1-3 files
+
+
+    ;-------  Seagate NARR data directories  -------
     
-    SYNVAR              = "HGT_221_ISBL"
-    ;SYNVAR             = "CAPE_221_SPDY"
-    ;SYNVAR             = "PRMSL_221_MSL"
+    ; cdir = "/mnt/seagate/NARR/3D_grib1/"                    ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/flx/"                         ; Seagate  - NARR data - flx - PMSL
+    cdir = "/mnt/seagate/NARR/pbl/"                         ; Seagate  - NARR data - pbl - CAPE
+
+
+    grib_per_csv = 100   ; Set the number of grib files to go into one csv file. Max is 131 due to row limitations.
     
-    SYNABBR            = "H500"
-    ;SYNABBR            = "CAPE"
-    ;SYNABBR            = "PMSL"
+
+    ; SYNVAR              = "HGT_221_ISBL"
+    ; SYNVAR             = "PRMSL_221_MSL"
+    SYNVAR             = "CAPE_221_SPDY"
+    
+
+    ; SYNABBR            = "H500"
+    ; SYNABBR            = "PMSL"
+    SYNABBR            = "CAPE"
  
-    csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
-    ;csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
+
+    ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
+    ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    ;---Set csv file name
-    SYNNAME_CSV         = SYNABBR+"_OR_WA.csv"
+
     
     ;---Get grib1 file list, print it
     if(SYNVAR .eq. "HGT_221_ISBL") then
@@ -69,21 +84,66 @@ begin
     ;if csv_type == "multiple"
     ;    ;csv_filename = cdir + file_list(i) + ".csv"
     ;if csv_type == "single"
-        csv_filename = cdir + SYNNAME_CSV
+    ;    ;csv_filename = cdir + SYNABBR + ".csv"
     
-    system("rm -rf " + csv_filename) ; Removes current csv file if it exists
+    ;--------------------- Initialize csv file parameters -------------------
+    ;---Set csv file name
+    SYNNAME_CSV = "0_" + SYNABBR + ".csv"
     
+    ;---Add directory to csv file name
+    csv_filename = cdir + SYNNAME_CSV
+            
+    ;---Remove current csv file if it exists
+    system("rm -rf " + csv_filename)
+            
     ;---Manually set header lines
     field_names = (/ "time", "lon", "lat", SYNABBR /)
     
     ;---Merge column names into comma separated string
     header = [/str_join(field_names,",")/]
     
+    ;---Write header into the csv file
     write_table(csv_filename, "w", header, "%s")
+    ;------------------------------------------------------------------------
+    
     
     endfile = nfiles-1
+    c = 0
     do i = 0, nfiles-1
+        
+        ;---Making csv_filename suffixes.
+        ;---i .eq. (number of grib files to pack into one csv file)
+        if(i .gt. 0 .and. i%grib_per_csv .eq. 0) then
+            ;---Update counter variable
+            c = c+1
+            print("number of csv files made = "+c)
+
+            ;---Set csv file name
+            SYNNAME_CSV = tostring(c) + "_" + SYNABBR + ".csv"
+            
+            ;---Add directory to csv file name
+            csv_filename = cdir + SYNNAME_CSV
+            
+            ;---Remove current csv file if it exists
+            system("rm -rf " + csv_filename)
+            
+            ;---Manually set header lines
+            field_names = (/ "time", "lon", "lat", SYNABBR /)
+    
+            ;---Merge column names into comma separated string
+            header = [/str_join(field_names,",")/]
+    
+            ;---Write header into the csv file
+            write_table(csv_filename, "w", header, "%s")
+            
+        end if
+    
         print("~~~~~~ Currently processing "+file_list(i)+" ~~~~~~")
+        
+        ;---Printing "0_H500.csv", etc. outside of if loop above so it prints
+        ;---on every iteration, not just when the if statement above is true
+        print("csv file name: "+SYNNAME_CSV)
+
         ;---Pick three 3D arrays to write to CSV file
         ;v    = f[i]->HGT_221_ISBL ; selects ith file's Geopotential height
         ;v    = f[i]->CAPE_221_SPDY
@@ -212,6 +272,7 @@ begin
         ;alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, PMSL_OR_WA_1d/]
         alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D/]
         format = "%s,%g,%g,%g"
+        print("csv directory: "+csv_filename)
         write_table(csv_filename, "a", alist, format)
         
         ;progress = (c/(n_files-1))*100
