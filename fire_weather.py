@@ -34,456 +34,42 @@ import numpy as np
 print(np.__version__)
 
 
-def import_gridMET_csv():
-    # Imports all csv files ending in ERC and concatenates them together into
-    # df_erc, sets index to lon, lat, time, and converts days since Jan 1, 1900 
-    # to date format, 
-
-    # Path to gridMET outcome variables (ERC, BI, etc) for supervision:
-    path_all_gridMET_csv = '/home/dp/Documents/FWP/gridMET/csv/'
-
-    # gridMET csv file names must end with ERC.csv:
-    all_gridMET_files = glob.glob(os.path.join(path_all_gridMET_csv, '*ERC.csv'))
-    # print('all_gridMET_files:\n', all_gridMET_files)
-
-    nfiles = len(all_gridMET_files)
-    print('Building ERC dataframe, could take a minute. Relax.')
-    df_gen = (pd.read_csv(file, header='infer', index_col=['lon','lat','time']) for file in all_gridMET_files)
-    df_erc = pd.concat(df_gen, axis=0)
-    # print('df: gridMET ERC:\n', df_erc)
-
-    df_erc.reset_index(inplace=True)
-
-    # You can add a datetime object to an entire dataframe column of timedelta objects,
-    # as done below. This is done because df_erc time column is in days since Jan 1, 1900,
-    # and needs to be converted to a relevant datetime object.
-    df_erc['time'] = pd.to_timedelta(df_erc['time'], unit='D') + datetime(1900,1,1,0,0)
-    df_erc.set_index(['lon','lat','time'], inplace=True)
-    df_erc.sort_index(level=2, inplace=True)
-    print('df_erc with timedelta:\n', df_erc)
-
-    df_erc_pkl = df_erc.to_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
-
-    return
-
-
-def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max):
-    # Imports df_erc and df_all_synvar pickle files, converts to dataframes,
-    # sets index of each to time column, aggregates NARR data from 3hrs
-    # to 24hrs to match 24 hour ERC data.
-    # For day D of ERC data, the temporal aggregation is the 24 hour period from
-    # 2100 UTC of day D-1 to 1800 UTC of day D.
-    # The merge is then done by interpolating the gridMET grid (4km) to
-    # the NARR grid (32km) using 5 gridMET neighbors for each NARR grid
-    # point. The ERC values at those 5 points are interpolated linearly
-    # to the location of the NARR grid point, resulting in array 'zi',
-    # which is then written to the NARR dataframe as a new column 'ERC'.
-    # It's plotted and then pickled.
-
-    df_gridMET = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
-    print('df_gridMET:\n', df_gridMET)
-    df_NARR = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_plus_gradients.pkl')
-    print('df_NARR:\n', df_NARR)
-    time_window_hrs = 24 # Average NARR data over 24 hr period to match gridMET
-
-    # gridMET converted to dates. Would add 2100 UTC to gridMET but not necessary
-    # because the analysis will be done on daily, not sub-daily, data.
-    df_gridMET.reset_index(inplace=True)
-    df_gridMET['time'] = df_gridMET['time'].dt.date # Converting time to date
-    print('df_gridMET reduced to dates **************************************:\n', df_gridMET)
-
-    ################################################################
-    # Date range strings parsed to datetime objects
-    start_dt_object = datetime.strptime(start_date, '%Y,%m,%d')
-    end_dt_object = datetime.strptime(end_date, '%Y,%m,%d')
-    print('start_dt_object:\n', start_dt_object)
-    print('end_dt_object:\n', end_dt_object)
-
-    # Convert start and end datetimes to dates
-    start_date_object = datetime.date(start_dt_object)
-    end_date_object = datetime.date(end_dt_object)
-    print('start_date_object:\n', start_date_object)
-    print('end_date_object:\n', end_date_object)
-
-    # Timedelta object for number of days from start_date to end_date.
-    # Used to make timedelta list for making date list
-    num_days = (end_date_object - start_date_object)
-    print('num_days in days:\n', num_days)
-
-    # Creating timedelta_list, then using it to make date_list
-    timedelta_list = [timedelta(days=days) for days in list(range(0,1000)) if timedelta(days=days) <= num_days]
-    print('timedelta_list:\n', timedelta_list)
-    date_list = [td+start_date_object for td in timedelta_list]
-    print('date_list:\n', date_list)
-    
-    # Removes first day. NARR average needs averages across day 1 and 2, thus gridMET data must start on day 2
-    date_list = date_list[1:]
-
-    # Creating time range list of tuples used to select a time range for each
-    # NARR grid point and then average the data associated with those grid points.
-    # Note that date_list now starts at day 2.
-    time_range_list = [(pd.Timestamp(d)-timedelta(hours=3),pd.Timestamp(d)+timedelta(hours=18)) for d in date_list]
-    print('time_range_list:\n', time_range_list)
-    ################################################################
-
-    # df_NARR currently has lon, lat, time as indices:
-    df_NARR.reset_index(inplace=True)
-
-    # Setting the index to time to select all data in a particular time range before
-    # grouping on longitude:
-    # Selecting a time range is easier with one index. Using a multiindex requires
-    # knowing the "coordinates" of the index, e.g. .loc[(first lon, first lat, first time):(last lon, lat lat, last time)]
-    # I don't know first and last lon and lat but could get them. Alternatively, just use time index then reset to
-    # lon lat time index later.
-    df_NARR.set_index('time', inplace=True)
-
-    # time_range_list is a list of tuples of times:
-    # time_range_list = [(Timestamp(1979,1,1,21,0,0), Timestamp(1979,1,2,18,0,0)),...]
-    df_NARR_all_time_avg = pd.DataFrame([])
-    for i, tr in enumerate(time_range_list):
-        # This loop goes through all of the NARR data and gets each grid point's
-        # data for datetime ranges from day-1 2100 UTC to day 1800 UTC and
-        # averages that data, then moves onto to the same time range for the
-        # next, concatenating the dataframes together.
-
-        # # Running this section prints each of the NARR grid point's
-        # # data for the specified time range. There are a lot of grid points,
-        # # takes some time to print.
-        # # Grouping by longitude after a select time range is selected:
-        # for name, group in df_NARR_time_range.groupby('lon'):
-        #     print(name)
-        #     print(group)
-        # df_NARR_time_avg = df_NARR_time_range.groupby('lon').mean()
-        
-        # time range start and end
-        tr_start = tr[0]
-        tr_end = tr[1]
-        # lon lat range
-
-
-        D = datetime.date(tr_end) # NARR date associated with gridMET date
-
-        # Average time across range, assign a date column to specify date
-        df_NARR_time_range = df_NARR.loc[tr_start:tr_end]
-        print('df_NARR_time_range:\n', df_NARR_time_range)
-
-        df_NARR_time_range.reset_index(inplace=True)
-        cols = df_NARR_time_range.columns
-        df_NARR_time_range[['lon','lat','H500 Grad X','H500 Grad Y','PMSL Grad X','PMSL Grad Y','CAPE']] = df_NARR_time_range[['lon','lat','H500 Grad X','H500 Grad Y','PMSL Grad X','PMSL Grad Y','CAPE']].apply(pd.to_numeric)
-        print('df_NARR_time_range after resetting index:\n', df_NARR_time_range)
-        df_NARR_time_range.set_index(['lon','lat','time'], inplace=True)
-        print('df_NARR_time_range after setting index to lon, lat, time:\n', df_NARR_time_range)
-        print('df_NARR_time_range.loc[-126.956]:\n', df_NARR_time_range.loc[-124.500,48.3277])#,datetime(1979,1,1,0,0,0)]['H500 Grad Y'])
-        df_NARR_time_avg = df_NARR_time_range.groupby(['lon','lat']).mean()
-        print('df_NARR_time_avg before assigning day D to time column:\n', df_NARR_time_avg)
-        df_NARR_time_avg['time'] = D
-        print('df_NARR_time_avg after assigning day D to time column:\n', df_NARR_time_avg)
-        
-        if i == 0: # First time through loop, append df_NARR_date to columns
-            # When i = 0, all H500 files in df are processed:
-            df_NARR_all_time_avg = df_NARR_all_time_avg.append(df_NARR_time_avg)
-            print('First df_NARR_all_time_avg concatenation:\n', df_NARR_all_time_avg)
-        else: # Concat df_NARR_date to rows of df_NARR_ERC
-            df_NARR_all_time_avg = pd.concat((df_NARR_all_time_avg, df_NARR_time_avg), axis=0)
-            # print('Second df_NARR_all_time_avg concatenation:\n', df_NARR_time_avg)
-            # print('df_NARR_time_avg.columns:\n', df_NARR_time_avg.columns)
-            print('***************************** Analyzing {} - {} *****************************'.format(tr_start,tr_end))
-
-    df_NARR = df_NARR_all_time_avg
-    
-    # Right now lon is the index value, reset it, set index to time
-    df_NARR.reset_index(inplace=True)
-    print('df_NARR after time range averaging:\n', df_NARR)
-
-    df_NARR_ERC = pd.DataFrame([])
-    for i, d in enumerate(date_list):
-        # This loop goes through every date and interpolates gridMET ERC
-        # values to the NARR grid using nearest neighbor interpolation.
-        # df_gridMET and df_NARR matching the date are copied to
-        # df_gridMET_date and df_NARR_date. Interpolation is performed
-        # on these dataframes.
-        # The interpolated ERC values are copied to df_NARR_date['ERC']
-        # and then concatenated to df_NARR_ERC.
-        df_gridMET_date = df_gridMET[df_gridMET['time'] == d]
-        df_NARR_date = df_NARR[df_NARR['time'] == d]
-        print('df_gridMET_date:\n', df_gridMET_date)
-        print('df_NARR_date:\n', df_NARR_date)
-        print('df_gridMET_date shape:\n', np.shape(df_gridMET_date.values))
-        print('df_NARR_date shape:\n', np.shape(df_NARR_date.values))
-
-        # # PLOT 1: Plotting NARR grid over gridMET grid:
-        # plt.figure()
-        # plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
-        # plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
-        # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
-        # plt.title('NARR grid after removing out-of-bounds points')
-        # plt.legend()
-        # plt.savefig('NARR_gridMET_complete_grids.png', bbox_inches='tight')
-        # plt.show()
-
-        # Changing invalid data points to values the interpolation
-        # algorithm can interpolate to:
-        ########################## df_gridMET_date.replace(-32767, 1.0123456789, inplace=True)
-
-        # Clip NARR grid to min and max lon lat values in the gridMET grid
-        x_min = min(df_gridMET_date['lon'].values); x_max = max(df_gridMET_date['lon'].values)
-        y_min = min(df_gridMET_date['lat'].values); y_max = max(df_gridMET_date['lat'].values)
-        print('x_min:\n', x_min)
-        print('x_max:\n', x_max)
-        print('y_min:\n', y_min)
-        print('y_max:\n', y_max)
-
-        # Select all rows that are inside the lon-lat window of the ERC dataset:
-        criteria = (x_max >= df_NARR_date['lon']) & (df_NARR_date['lon'] >= x_min) & (y_max >= df_NARR_date['lat']) & (df_NARR_date['lat'] >= y_min)
-        print('NARR rows before cutting out-of-bounds lon-lat points:', df_NARR_date.count())
-        df_NARR_date = df_NARR_date.loc[criteria]
-        print('NARR rows after cutting out-of-bounds lon-lat points:', df_NARR_date.count())
-        print('df_NARR_date after removing out-of-bounds Lon-Lat points:\n', df_NARR_date)
-
-        # # PLOT 2: Plotting NARR grid where it overlaps with gridMET:
-        # plt.figure()
-        # plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
-        # plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
-        # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
-        # plt.title('NARR grid after removing out-of-bounds points')
-        # plt.legend()
-        # plt.savefig('NARR_gridMET_complete_grids.png', bbox_inches='tight')
-        # plt.show()
-
-        # Define x y and z for interpolation:
-        x = df_gridMET_date.lon.values
-        y = df_gridMET_date.lat.values
-        z = df_gridMET_date.erc.values
-        xi = df_NARR_date.lon.values
-        yi = df_NARR_date.lat.values
-        print('x:\n{}\n y:\n{}\n z:\n{}\n'.format(x, y, z))
-        print('xi:\n{}\n yi:\n{}\n'.format(xi,yi))
-        print('x shape:\n{}\n y shape:\n{}\n z shape:\n{}\n'.format(np.shape(x), np.shape(y), np.shape(z)))
-        print('xi shape:\n{}\n yi shape:\n{}\n'.format(np.shape(xi),np.shape(yi)))
-        
-        # Interpolation:
-        would_you_be_my_neighbor = 5
-        gridMET_shape = np.shape(df_gridMET_date.values[:,0:2])
-        NARR_shape = np.shape(df_NARR_date.values[:,0:2])
-        print('gridMET shape:', gridMET_shape)
-        print('NARR shape:', NARR_shape)
-        tree = neighbors.KDTree(df_gridMET_date.values[:,0:2], leaf_size=2)
-        dist, ind = tree.query(df_NARR_date.values[:,0:2], k=would_you_be_my_neighbor)
-        print('indices:', ind)  # indices of 3 closest neighbors
-        print('distances:', dist)  # distances to 3 closest neighbors
-        print('df_NARR_date with ERC rounded to nearest int and invalid rows removed:\n', df_NARR_date)
-
-        # Create ERC data (zi) from interpolated grid
-        zi = griddata((x,y),z,(xi,yi),method='nearest')
-        print('zi:\n', zi)
-        print('zi shape:\n{}\n'.format(np.shape(zi)))
-
-        # Plotting before and after interpolation of gridMET ERC to NARR grid:
-        # Plots gridMET grid before and after interpolation. It uses gridMET grid,
-        # so the plotting is done here rather than inside of plot_NARR_ERC() which
-        # already has the gridMET ERC data within df_NARR_date_ERC.
-
-        if d == date_list[-1]: # Only plot if on last date in date_list
-            plt.close()
-            plt.figure()
-            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
-            plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
-            plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
-            plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
-            plt.title('Nearest gridMET points using interpolated indices')
-            plt.legend()
-            plt.savefig('NARR_gridMET_before_interp.png', bbox_inches='tight')
-            plt.show()
-
-            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
-            plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
-            plt.scatter(x=xi, y=yi, color='y', edgecolors='y', alpha=0.6, marker='o', s=zi, label='interp NARR')
-            plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
-            plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
-            plt.title('Interpolated ERC values')
-            plt.legend()
-            plt.savefig('NARR_gridMET_after_interp.png', bbox_inches='tight')
-            plt.show()
-
-        # Add interpolated ERC values (contained in list zi) to a new df_NARR_date column.
-        # This is where the merge takes place, no need to align on indices using df.merge().
-        # There are no indices to align on anyways because zi was created with the same lon-lat
-        # order as the NARR data:
-        df_NARR_date['ERC'] = zi
-        print('df_NARR_date with ERC:\n', df_NARR_date)
-
-        if i == 0: # First time through loop, append df_NARR_date to columns
-            # When i = 0, all H500 files in df are processed:
-            df_NARR_ERC = df_NARR_ERC.append(df_NARR_date)
-            print('First df_NARR_ERC concatenation:\n', df_NARR_ERC)
-            print('***************************** Analyzing {} *****************************'.format(d))
-        else: # Concat df_NARR_date to rows of df_NARR_ERC
-            df_NARR_ERC = pd.concat((df_NARR_ERC, df_NARR_date), axis=0)
-            # print('Second df_NARR_ERC concatenation:\n', df_NARR_date)
-            # print('df_NARR_date.columns:\n', df_NARR_date.columns)
-            print('***************************** Analyzing {} *****************************'.format(d))
-
-    # Getting lon, lat, time all on the left hand side so order is correct in the
-    # csv for Julia import
-    df_NARR_ERC.set_index(['lon','lat','time'], inplace=True)
-    df_NARR_ERC.reset_index(inplace=True)
-    # Remove invalid values:
-    # print('df_NARR rows before rounding ERC:\n', df_NARR_ERC.count())
-    df_NARR_ERC = df_NARR_ERC[df_NARR_ERC['ERC'] > 0]
-    # print('df_NARR_ERC rows after rounding ERC:\n', df_NARR_ERC.count())
-    df_NARR_ERC = df_NARR_ERC.round({'ERC':0})
-    print('df_NARR_ERC rows after rounding ERC to nearest integer and removing invalid values:\n', df_NARR_ERC)
-    # erc_levels = {'low':(0,19),\
-    #                 'moderate':(19,27),\
-    #                 'high':(27,35),\
-    #                 'very high':(33,44),\
-    #                 'extreme':(44,100)}
-    # print('erc_levels:\n', erc_levels)
-    
-    erc_bins = [-1,19,27,35,44,500]
-    erc_labels = ['low','moderate','high','very high','extreme']
-    # Cutting returns a series with categorical ERC values
-    s_ERC_categorical = pd.cut(df_NARR_ERC['ERC'], bins=erc_bins, labels=erc_labels)
-    print('s_ERC_categorical:\n', s_ERC_categorical)
-    # Concatenate df_NARR_ERC (minus its ERC data) to the categorical ERC data
-    df_NARR_ERC_categorical = pd.concat((df_NARR_ERC.drop('ERC', axis=1), s_ERC_categorical), axis=1)
-    print('df_NARR_ERC_categorical:\n', df_NARR_ERC_categorical)
-
-    # Export to pickle and csv:
-    print('Exporting continuous and categorical NARR ERC data to pickle and csv... **************************')
-    df_NARR_ERC_pkl = df_NARR_ERC.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
-    df_NARR_ERC.to_csv('/home/dp/Documents/FWP/NARR/df_NARR_ERC.csv', header=True, index=False) # Includes index columns, names all columns at top of file
-    # Export df_NARR_ERC_categorical data to pickle and csv:
-    df_NARR_ERC_categorical_pkl = df_NARR_ERC.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC_categorical.pkl')
-    df_NARR_ERC_categorical.to_csv('/home/dp/Documents/FWP/NARR/df_NARR_ERC_categorical.csv', header=True, index=False) # Includes index columns, names all columns at top of file
-    
-    return
-
-
-
-def plot_NARR_ERC(ERC_date):
-    # This function makes the following:
-    # 1)    Contour plot containing tripcolour and tricontourf subplots
-    #       of ERC data on a single date
-    # 2)    Time series of synoptic variable data for a single lon-lat point
-    #       over the dataframe's entire time range
-
-    df_NARR_ERC = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
-    print('df_NARR with ERC:\n', df_NARR_ERC)
-
-    # WARNING: These x,y,t values are for all days in df_NARR_ERC.
-    # Currently, df_NARR_ERC only covers Jan 1, 1979, and this
-    # means the plot below that uses these values works. It won't
-    # work when there are multiple dates.
-    x = df_NARR_ERC.lon.values.tolist()     # Longitude
-    y = df_NARR_ERC.lat.values.tolist()     # Latitude
-    t = df_NARR_ERC.time.tolist()    # Time
-    # print('x values from df_NARR_ERC.lon:\n', x)
-    # print('y values from df_NARR_ERC.lat:\n', y)
-    # print('t values from df_NARR_ERC.time:\n', t)
-
-    # Getting z values and building new dataframe with time index and ERC data.
-    z = df_NARR_ERC['ERC'].values.tolist()
-    d = [i for i in zip(t,x,y,z)]
-    print('d:\n', d)
-    df = pd.DataFrame(data=d, columns=['time','lon','lat','ERC'])
-    df.set_index('time', inplace=True)
-    print('df.index:\n', df.index)
-    print('df.index[10]:\n', df.index[10])
-
-    # Convert timepoint to build contour plot from ERC data
-    ERC_date = datetime.strptime(ERC_date, '%Y,%m,%d')
-    print('ERC_date:', ERC_date)
-    # Get the ERC data for the day specified
-    df_t0 = df[(df.index == ERC_date)]
-    # Split into constituents
-    x_t0 = df_t0['lon'].values.tolist()
-    y_t0 = df_t0['lat'].values.tolist()
-    z_t0 = df_t0['ERC'].values.tolist()
-    print('df_t0:\n', df_t0)
-    # print('Shape x_t0:\n', np.shape(x_t0))
-    # print('Shape y_t0:\n', np.shape(y_t0))
-    # print('Shape z_t0:\n', np.shape(z_t0))
-
-    plt.close()
-    f, ax = plt.subplots(1,2, figsize=(8,3), sharex=True, sharey=True)
-
-    ax[0].tripcolor(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # Plots across all timepoints?
-    ax[0].plot(x_t0, y_t0, 'ko ', markersize=1)
-    ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
-
-    tcf = ax[1].tricontourf(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # 20 contour levels is good quality
-    ax[1].plot(x_t0, y_t0, 'ko ', markersize=1)
-    ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
-    f.colorbar(tcf)
-
-    date_str = ERC_date.strftime('%b %d, %Y')
-    plt.suptitle('ERC Contour Plots: '+date_str)
-    
-    plt.savefig('ERC_contour.png', bbox_inches='tight')
-    plt.show()
-
-    df_NARR_ERC.reset_index(inplace=True)
-    df_NARR_ERC.set_index('lon', inplace=True)
-    print('df_NARR_ERC with lon index:\n', df_NARR_ERC)
-    # Specifying a longitude point, make this an
-    # actual longitude value in the future:
-    lon = -124.500
-    df_NARR_ERC_lon_lat_time_series = df_NARR_ERC.loc[lon]
-    print('df_NARR_ERC_lon_lat_time_series:\n', df_NARR_ERC_lon_lat_time_series)
-    
-    plt.close()
-    # Plotting three time series of df_NARR_ERC data at a lon-lat time:
-    # 1) H500 X and Y Gradients
-    # 2) PMSL X and Y Gradients 
-    # 3) CAPE
-    # 4) ERC
-    fig, ax = plt.subplots(1,4, figsize=(14,3))
-    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0], color='k')
-    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0], color='g')
-    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[1], color='gray')
-    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[1], color='m')
-    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='CAPE', ax=ax[2], color='orange')
-    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='ERC', ax=ax[3], color='r')
-    ax[0].set_xlabel('Date')
-    ax[0].set_ylabel('H500 Grad at '+str(lon)+'deg, m/deg')
-    ax[0].set_title('Time Series: H500 Gradients')
-    ax[1].set_xlabel('Date')
-    ax[1].set_ylabel('PMSL Grad at '+str(lon)+'deg, hPa/deg')
-    ax[1].set_title('Time Series: PMSL Gradients')
-    ax[2].set_xlabel('Date')
-    ax[2].set_ylabel('CAPE at '+str(lon)+'deg, kJ/kg')
-    ax[2].set_title('Time Series: CAPE')
-    ax[3].set_xlabel('Date')
-    ax[3].set_ylabel('ERC at '+str(lon)+'deg, AR')
-    ax[3].set_title('Time Series: ERC')
-    plt.show()
-
-
-    return
-
-
-
-
 ''' --- Import NARR data from csv files and animate it --- '''
-def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
-    # Read in all NARR csv files from folder:
-    # Not sure what the double slashes are for: path = '..\\..\\data\\'
-    # SOMPY path: path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
+def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, num_import, import_NARR_csvs_from, export_NARR_pickle_to):
+    '''
+    Read in all NARR csv files from folder:
+    Not sure what the double slashes are for: path = '..\\..\\data\\'
+    SOMPY path: path = 'C:\\Users\\Dan\\Downloads\\SOMPY_robust_clustering-master\\SOMPY_robust_clustering-master\\data\\'
 
-    # Path to NARR feature variables (H500, PMSL, CAPE, etc):
-    path_all_NARR_csv = '/home/dp/Documents/FWP/NARR/csv/'
+    Parameters:
+    lon_min, lon_max, lat_min, lat_max: subsetting the data to OR and WA
+    num_import = number of csv files to import from the import_NARR_csvs_from import path
+    import_NARR_csvs_from -> path where csv files of NARR data are located and imported from
+    export_NARR_pickle_to -> path where the final dataframe of formatted synoptic variables are exported to
+
+    Old import paths:
+    import_NARR_csvs_from = '/home/dp/Documents/FWP/NARR/csv/'
+    import_NARR_csvs_from = '/mnt/seagate/NARR/csv/'
+
+    Old export paths:
+    export_NARR_pickle_to = '/home/dp/Documents/FWP/NARR/pickle/'
+    '''
 
     # NARR csv file names must end with either H500.csv, CAPE.csv, or PMSL.csv:
-    H500_files = glob.glob(os.path.join(path_all_NARR_csv, '*H500.csv')) # H500 file paths in a list
-    CAPE_files = glob.glob(os.path.join(path_all_NARR_csv, '*CAPE.csv'))
-    PMSL_files = glob.glob(os.path.join(path_all_NARR_csv, '*PMSL.csv'))
-    all_NARR_files = [H500_files, CAPE_files, PMSL_files] # All file paths in a list of lists
+    H500_files = glob.glob(os.path.join(import_NARR_csvs_from, '*H500.csv'))
+    CAPE_files = glob.glob(os.path.join(import_NARR_csvs_from, '*CAPE.csv'))
+    PMSL_files = glob.glob(os.path.join(import_NARR_csvs_from, '*PMSL.csv'))
     print('H500_files:\n', H500_files)
-    print('all_NARR_files:\n', all_NARR_files)
-    all_NARR_files = [sorted(files) for files in all_NARR_files]
-    print('all_NARR_files after sorting:\n', all_NARR_files)
+    print('CAPE_files:\n', CAPE_files)
+    print('PMSL_files:\n', PMSL_files)
 
+    all_NARR_files = [H500_files, CAPE_files, PMSL_files] # All file paths in a list of lists
+    print('H500 file paths:\n', H500_files)
+    print('All NARR file paths :\n', all_NARR_files)
+    all_NARR_files = [sorted(file_list) for file_list in all_NARR_files]
+    print('All NARR file paths - after sorting:\n', all_NARR_files)
+    all_NARR_files = [file_list[0:num_import] for file_list in all_NARR_files]
+    print('All NARR file paths - 0:num_import:\n', all_NARR_files)
 
     SYNABBR_shortlist = ['H500', 'CAPE', 'PMSL']
     ''' Creating '''
@@ -1272,18 +858,15 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
     print('df_all_synvar_plus_gradients:\n', df_all_synvar_plus_gradients.head())
     print('df_all_synvar_grid_interp:\n', df_all_synvar_grid_interp.head())
 
-    # Export paths:
-    export_pickle_dir = '/home/dp/Documents/FWP/NARR/pickle/'
-    export_csv_dir = '/home/dp/Documents/FWP/NARR/csv/'
 
     # Pickle out:
     print('Exporting to Pickle...')
     print('df_all_synvar_plus_gradients.columns:\n', df_all_synvar_plus_gradients.columns)
     print('df_all_synvar_grid_interp.columns:\n', df_all_synvar_grid_interp.columns)
-    df_all_synvar_plus_gradients_pkl = df_all_synvar_plus_gradients.to_pickle(export_pickle_dir + 'df_all_synvar_plus_gradients.pkl')
-    df_all_synvar_grid_interp_pkl = df_all_synvar_grid_interp.to_pickle(export_pickle_dir + 'df_all_synvar_grid_interp.pkl')
+    df_all_synvar_plus_gradients_pkl = df_all_synvar_plus_gradients.to_pickle(export_NARR_pickle_to + 'df_all_synvar_plus_gradients.pkl')
+    df_all_synvar_grid_interp_pkl = df_all_synvar_grid_interp.to_pickle(export_NARR_pickle_to + 'df_all_synvar_grid_interp.pkl')
 
-    ######## DON'T EXPORT TO CSV BECAUSE ONLY THE PICKLE VERSIONS ARE USED IN merge_NARR_gridMET().
+    ######## DON'T EXPORT THE FINAL DF TO CSV BECAUSE ONLY THE PICKLE VERSIONS ARE USED IN merge_NARR_gridMET().
     # # Export to csv:
     # print('Exporting to CSV... (This could take a minute) ******************************')
     # df_all_synvar_plus_gradients.to_csv(export_csv_dir + 'df_all_synvar_plus_gradients.csv', index=True, header=True)
@@ -1292,6 +875,441 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max):
     # NOTE: Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
 
     return
+
+
+
+def import_gridMET_csv():
+    # Imports all csv files ending in ERC and concatenates them together into
+    # df_erc, sets index to lon, lat, time, and converts days since Jan 1, 1900 
+    # to date format, 
+
+    # Path to gridMET outcome variables (ERC, BI, etc) for supervision:
+    import_gridMET_csv_from = '/home/dp/Documents/FWP/gridMET/csv/'
+
+    # gridMET csv file names must end with ERC.csv:
+    all_gridMET_files = glob.glob(os.path.join(import_gridMET_csv_from, '*ERC.csv'))
+    # print('all_gridMET_files:\n', all_gridMET_files)
+
+    nfiles = len(all_gridMET_files)
+    print('Building ERC dataframe, could take a minute. Relax.')
+    df_gen = (pd.read_csv(file, header='infer', index_col=['lon','lat','time']) for file in all_gridMET_files)
+    df_erc = pd.concat(df_gen, axis=0)
+    # print('df: gridMET ERC:\n', df_erc)
+
+    df_erc.reset_index(inplace=True)
+
+    # You can add a datetime object to an entire dataframe column of timedelta objects,
+    # as done below. This is done because df_erc time column is in days since Jan 1, 1900,
+    # and needs to be converted to a relevant datetime object.
+    df_erc['time'] = pd.to_timedelta(df_erc['time'], unit='D') + datetime(1900,1,1,0,0)
+    df_erc.set_index(['lon','lat','time'], inplace=True)
+    df_erc.sort_index(level=2, inplace=True)
+    print('df_erc with timedelta:\n', df_erc)
+
+    df_erc_pkl = df_erc.to_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
+
+    return
+
+
+def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max):
+    # Imports df_erc and df_all_synvar pickle files, converts to dataframes,
+    # sets index of each to time column, aggregates NARR data from 3hrs
+    # to 24hrs to match 24 hour ERC data.
+    # For day D of ERC data, the temporal aggregation is the 24 hour period from
+    # 2100 UTC of day D-1 to 1800 UTC of day D.
+    # The merge is then done by interpolating the gridMET grid (4km) to
+    # the NARR grid (32km) using 5 gridMET neighbors for each NARR grid
+    # point. The ERC values at those 5 points are interpolated linearly
+    # to the location of the NARR grid point, resulting in array 'zi',
+    # which is then written to the NARR dataframe as a new column 'ERC'.
+    # It's plotted and then pickled.
+
+    df_gridMET = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
+    print('df_gridMET:\n', df_gridMET)
+    df_NARR = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_plus_gradients.pkl')
+    print('df_NARR:\n', df_NARR)
+    time_window_hrs = 24 # Average NARR data over 24 hr period to match gridMET
+
+    # gridMET converted to dates. Would add 2100 UTC to gridMET but not necessary
+    # because the analysis will be done on daily, not sub-daily, data.
+    df_gridMET.reset_index(inplace=True)
+    df_gridMET['time'] = df_gridMET['time'].dt.date # Converting time to date
+    print('df_gridMET reduced to dates **************************************:\n', df_gridMET)
+
+    ################################################################
+    # Date range strings parsed to datetime objects
+    start_dt_object = datetime.strptime(start_date, '%Y,%m,%d')
+    end_dt_object = datetime.strptime(end_date, '%Y,%m,%d')
+    print('start_dt_object:\n', start_dt_object)
+    print('end_dt_object:\n', end_dt_object)
+
+    # Convert start and end datetimes to dates
+    start_date_object = datetime.date(start_dt_object)
+    end_date_object = datetime.date(end_dt_object)
+    print('start_date_object:\n', start_date_object)
+    print('end_date_object:\n', end_date_object)
+
+    # Timedelta object for number of days from start_date to end_date.
+    # Used to make timedelta list for making date list
+    num_days = (end_date_object - start_date_object)
+    print('num_days in days:\n', num_days)
+
+    # Creating timedelta_list, then using it to make date_list
+    timedelta_list = [timedelta(days=days) for days in list(range(0,1000)) if timedelta(days=days) <= num_days]
+    print('timedelta_list:\n', timedelta_list)
+    date_list = [td+start_date_object for td in timedelta_list]
+    print('date_list:\n', date_list)
+    
+    # Removes first day. NARR average needs averages across day 1 and 2, thus gridMET data must start on day 2
+    date_list = date_list[1:]
+
+    # Creating time range list of tuples used to select a time range for each
+    # NARR grid point and then average the data associated with those grid points.
+    # Note that date_list now starts at day 2.
+    time_range_list = [(pd.Timestamp(d)-timedelta(hours=3),pd.Timestamp(d)+timedelta(hours=18)) for d in date_list]
+    print('time_range_list:\n', time_range_list)
+    ################################################################
+
+    # df_NARR currently has lon, lat, time as indices:
+    df_NARR.reset_index(inplace=True)
+
+    # Setting the index to time to select all data in a particular time range before
+    # grouping on longitude:
+    # Selecting a time range is easier with one index. Using a multiindex requires
+    # knowing the "coordinates" of the index, e.g. .loc[(first lon, first lat, first time):(last lon, lat lat, last time)]
+    # I don't know first and last lon and lat but could get them. Alternatively, just use time index then reset to
+    # lon lat time index later.
+    df_NARR.set_index('time', inplace=True)
+
+    # time_range_list is a list of tuples of times:
+    # time_range_list = [(Timestamp(1979,1,1,21,0,0), Timestamp(1979,1,2,18,0,0)),...]
+    df_NARR_all_time_avg = pd.DataFrame([])
+    for i, tr in enumerate(time_range_list):
+        # This loop goes through all of the NARR data and gets each grid point's
+        # data for datetime ranges from day-1 2100 UTC to day 1800 UTC and
+        # averages that data, then moves onto to the same time range for the
+        # next, concatenating the dataframes together.
+
+        # # Running this section prints each of the NARR grid point's
+        # # data for the specified time range. There are a lot of grid points,
+        # # takes some time to print.
+        # # Grouping by longitude after a select time range is selected:
+        # for name, group in df_NARR_time_range.groupby('lon'):
+        #     print(name)
+        #     print(group)
+        # df_NARR_time_avg = df_NARR_time_range.groupby('lon').mean()
+        
+        # time range start and end
+        tr_start = tr[0]
+        tr_end = tr[1]
+        # lon lat range
+
+
+        D = datetime.date(tr_end) # NARR date associated with gridMET date
+
+        # Average time across range, assign a date column to specify date
+        df_NARR_time_range = df_NARR.loc[tr_start:tr_end]
+        print('df_NARR_time_range:\n', df_NARR_time_range)
+
+        df_NARR_time_range.reset_index(inplace=True)
+        cols = df_NARR_time_range.columns
+        df_NARR_time_range[['lon','lat','H500 Grad X','H500 Grad Y', 'CAPE', 'PMSL Grad X','PMSL Grad Y']] = df_NARR_time_range[['lon','lat','H500 Grad X','H500 Grad Y', 'CAPE', 'PMSL Grad X','PMSL Grad Y']].apply(pd.to_numeric)
+        print('df_NARR_time_range after resetting index and making columns numeric:\n', df_NARR_time_range)
+        df_NARR_time_range['time'] = pd.to_datetime(df_NARR_time_range['time'])
+        df_NARR_time_range.set_index(['lon','lat','time'], inplace=True)
+        print('df_NARR_time_range after setting index to lon, lat, time:\n', df_NARR_time_range)
+        # It might complain that -124.500 doesn't exist:
+        print('df_NARR_time_range.loc[-126.956]:\n', df_NARR_time_range.loc[-124.500,48.3277])#,datetime(1979,1,1,0,0,0)]['H500 Grad Y'])
+        print('The script may fail here and complain about no numeric types to aggregate.\nCheck that the end date exists in the last csv file made in import_NARR_csv()')
+        df_NARR_time_avg = df_NARR_time_range.groupby(['lon','lat']).mean()
+        print('df_NARR_time_avg before assigning day D to time column:\n', df_NARR_time_avg)
+        df_NARR_time_avg['time'] = D
+        print('df_NARR_time_avg after assigning day D to time column:\n', df_NARR_time_avg)
+        
+        if i == 0: # First time through loop, append df_NARR_date to columns
+            # When i = 0, all H500 files in df are processed:
+            df_NARR_all_time_avg = df_NARR_all_time_avg.append(df_NARR_time_avg)
+            print('First df_NARR_all_time_avg concatenation:\n', df_NARR_all_time_avg)
+        else: # Concat df_NARR_date to rows of df_NARR_ERC
+            df_NARR_all_time_avg = pd.concat((df_NARR_all_time_avg, df_NARR_time_avg), axis=0)
+            # print('Second df_NARR_all_time_avg concatenation:\n', df_NARR_time_avg)
+            # print('df_NARR_time_avg.columns:\n', df_NARR_time_avg.columns)
+            print('***************************** Analyzing {} - {} *****************************'.format(tr_start,tr_end))
+
+    df_NARR = df_NARR_all_time_avg
+    
+    # Right now lon is the index value, reset it, set index to time
+    df_NARR.reset_index(inplace=True)
+    print('df_NARR after time range averaging:\n', df_NARR)
+
+    df_NARR_ERC = pd.DataFrame([])
+    for i, d in enumerate(date_list):
+        # This loop goes through every date and interpolates gridMET ERC
+        # values to the NARR grid using nearest neighbor interpolation.
+        # df_gridMET and df_NARR matching the date are copied to
+        # df_gridMET_date and df_NARR_date. Interpolation is performed
+        # on these dataframes.
+        # The interpolated ERC values are copied to df_NARR_date['ERC']
+        # and then concatenated to df_NARR_ERC.
+        df_gridMET_date = df_gridMET[df_gridMET['time'] == d]
+        df_NARR_date = df_NARR[df_NARR['time'] == d]
+        print('df_gridMET_date:\n', df_gridMET_date)
+        print('df_NARR_date:\n', df_NARR_date)
+        print('df_gridMET_date shape:\n', np.shape(df_gridMET_date.values))
+        print('df_NARR_date shape:\n', np.shape(df_NARR_date.values))
+
+        # # PLOT 1: Plotting NARR grid over gridMET grid:
+        # plt.figure()
+        # plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
+        # plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
+        # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+        # plt.title('NARR grid after removing out-of-bounds points')
+        # plt.legend()
+        # plt.savefig('NARR_gridMET_complete_grids.png', bbox_inches='tight')
+        # plt.show()
+
+        # Changing invalid data points to values the interpolation
+        # algorithm can interpolate to:
+        ########################## df_gridMET_date.replace(-32767, 1.0123456789, inplace=True)
+
+        # Clip NARR grid to min and max lon lat values in the gridMET grid
+        x_min = min(df_gridMET_date['lon'].values); x_max = max(df_gridMET_date['lon'].values)
+        y_min = min(df_gridMET_date['lat'].values); y_max = max(df_gridMET_date['lat'].values)
+        print('x_min:\n', x_min)
+        print('x_max:\n', x_max)
+        print('y_min:\n', y_min)
+        print('y_max:\n', y_max)
+
+        # Select all rows that are inside the lon-lat window of the ERC dataset:
+        criteria = (x_max >= df_NARR_date['lon']) & (df_NARR_date['lon'] >= x_min) & (y_max >= df_NARR_date['lat']) & (df_NARR_date['lat'] >= y_min)
+        print('NARR rows before cutting out-of-bounds lon-lat points:', df_NARR_date.count())
+        df_NARR_date = df_NARR_date.loc[criteria]
+        print('NARR rows after cutting out-of-bounds lon-lat points:', df_NARR_date.count())
+        print('df_NARR_date after removing out-of-bounds Lon-Lat points:\n', df_NARR_date)
+
+        # # PLOT 2: Plotting NARR grid where it overlaps with gridMET:
+        # plt.figure()
+        # plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
+        # plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
+        # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+        # plt.title('NARR grid after removing out-of-bounds points')
+        # plt.legend()
+        # plt.savefig('NARR_gridMET_complete_grids.png', bbox_inches='tight')
+        # plt.show()
+
+        # Define x y and z for interpolation:
+        x = df_gridMET_date.lon.values
+        y = df_gridMET_date.lat.values
+        z = df_gridMET_date.erc.values
+        xi = df_NARR_date.lon.values
+        yi = df_NARR_date.lat.values
+        print('x:\n{}\n y:\n{}\n z:\n{}\n'.format(x, y, z))
+        print('xi:\n{}\n yi:\n{}\n'.format(xi,yi))
+        print('x shape:\n{}\n y shape:\n{}\n z shape:\n{}\n'.format(np.shape(x), np.shape(y), np.shape(z)))
+        print('xi shape:\n{}\n yi shape:\n{}\n'.format(np.shape(xi),np.shape(yi)))
+        
+        # Interpolation:
+        would_you_be_my_neighbor = 5
+        gridMET_shape = np.shape(df_gridMET_date.values[:,0:2])
+        NARR_shape = np.shape(df_NARR_date.values[:,0:2])
+        print('gridMET shape:', gridMET_shape)
+        print('NARR shape:', NARR_shape)
+        tree = neighbors.KDTree(df_gridMET_date.values[:,0:2], leaf_size=2)
+        dist, ind = tree.query(df_NARR_date.values[:,0:2], k=would_you_be_my_neighbor)
+        print('indices:', ind)  # indices of 3 closest neighbors
+        print('distances:', dist)  # distances to 3 closest neighbors
+        print('df_NARR_date with ERC rounded to nearest int and invalid rows removed:\n', df_NARR_date)
+
+        # Create ERC data (zi) from interpolated grid
+        zi = griddata((x,y),z,(xi,yi),method='nearest')
+        print('zi:\n', zi)
+        print('zi shape:\n{}\n'.format(np.shape(zi)))
+
+        # Plotting before and after interpolation of gridMET ERC to NARR grid:
+        # Plots gridMET grid before and after interpolation. It uses gridMET grid,
+        # so the plotting is done here rather than inside of plot_NARR_ERC() which
+        # already has the gridMET ERC data within df_NARR_date_ERC.
+
+        if d == date_list[-1]: # Only plot if on last date in date_list
+            plt.close()
+            plt.figure()
+            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
+            plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
+            plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
+            plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+            plt.title('Nearest gridMET points using interpolated indices')
+            plt.legend()
+            plt.savefig('NARR_gridMET_before_interp.png', bbox_inches='tight')
+            plt.show()
+
+            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
+            plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
+            plt.scatter(x=xi, y=yi, color='y', edgecolors='y', alpha=0.6, marker='o', s=zi, label='interp NARR')
+            plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
+            plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
+            plt.title('Interpolated ERC values')
+            plt.legend()
+            plt.savefig('NARR_gridMET_after_interp.png', bbox_inches='tight')
+            plt.show()
+
+        # Add interpolated ERC values (contained in list zi) to a new df_NARR_date column.
+        # This is where the merge takes place, no need to align on indices using df.merge().
+        # There are no indices to align on anyways because zi was created with the same lon-lat
+        # order as the NARR data:
+        df_NARR_date['ERC'] = zi
+        print('df_NARR_date with ERC:\n', df_NARR_date)
+
+        if i == 0: # First time through loop, append df_NARR_date to columns
+            # When i = 0, all H500 files in df are processed:
+            df_NARR_ERC = df_NARR_ERC.append(df_NARR_date)
+            print('First df_NARR_ERC concatenation:\n', df_NARR_ERC)
+            print('***************************** Analyzing {} *****************************'.format(d))
+        else: # Concat df_NARR_date to rows of df_NARR_ERC
+            df_NARR_ERC = pd.concat((df_NARR_ERC, df_NARR_date), axis=0)
+            # print('Second df_NARR_ERC concatenation:\n', df_NARR_date)
+            # print('df_NARR_date.columns:\n', df_NARR_date.columns)
+            print('***************************** Analyzing {} *****************************'.format(d))
+
+    # Getting lon, lat, time all on the left hand side so order is correct in the
+    # csv for Julia import
+    df_NARR_ERC.set_index(['lon','lat','time'], inplace=True)
+    df_NARR_ERC.reset_index(inplace=True)
+    # Remove invalid values:
+    # print('df_NARR rows before rounding ERC:\n', df_NARR_ERC.count())
+    df_NARR_ERC = df_NARR_ERC[df_NARR_ERC['ERC'] > 0]
+    # print('df_NARR_ERC rows after rounding ERC:\n', df_NARR_ERC.count())
+    df_NARR_ERC = df_NARR_ERC.round({'ERC':0})
+    print('df_NARR_ERC rows after rounding ERC to nearest integer and removing invalid values:\n', df_NARR_ERC)
+    # erc_levels = {'low':(0,19),\
+    #                 'moderate':(19,27),\
+    #                 'high':(27,35),\
+    #                 'very high':(33,44),\
+    #                 'extreme':(44,100)}
+    # print('erc_levels:\n', erc_levels)
+    
+    erc_bins = [-1,19,27,35,44,500]
+    erc_labels = ['low','moderate','high','very high','extreme']
+    # Cutting returns a series with categorical ERC values
+    s_ERC_categorical = pd.cut(df_NARR_ERC['ERC'], bins=erc_bins, labels=erc_labels)
+    print('s_ERC_categorical:\n', s_ERC_categorical)
+    # Concatenate df_NARR_ERC (minus its ERC data) to the categorical ERC data
+    df_NARR_ERC_categorical = pd.concat((df_NARR_ERC.drop('ERC', axis=1), s_ERC_categorical), axis=1)
+    print('df_NARR_ERC_categorical:\n', df_NARR_ERC_categorical)
+
+    # Export to pickle and csv:
+    print('Exporting continuous and categorical NARR ERC data to pickle and csv... **************************')
+    df_NARR_ERC_pkl = df_NARR_ERC.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
+    df_NARR_ERC.to_csv('/home/dp/Documents/FWP/NARR/df_NARR_ERC.csv', header=True, index=False) # Includes index columns, names all columns at top of file
+    # Export df_NARR_ERC_categorical data to pickle and csv:
+    df_NARR_ERC_categorical_pkl = df_NARR_ERC.to_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC_categorical.pkl')
+    df_NARR_ERC_categorical.to_csv('/home/dp/Documents/FWP/NARR/df_NARR_ERC_categorical.csv', header=True, index=False) # Includes index columns, names all columns at top of file
+    
+    return
+
+
+
+def plot_NARR_ERC(ERC_date):
+    # This function makes the following:
+    # 1)    Contour plot containing tripcolour and tricontourf subplots
+    #       of ERC data on a single date
+    # 2)    Time series of synoptic variable data for a single lon-lat point
+    #       over the dataframe's entire time range
+
+    df_NARR_ERC = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
+    print('df_NARR with ERC:\n', df_NARR_ERC)
+
+    # WARNING: These x,y,t values are for all days in df_NARR_ERC.
+    # Currently, df_NARR_ERC only covers Jan 1, 1979, and this
+    # means the plot below that uses these values works. It won't
+    # work when there are multiple dates.
+    x = df_NARR_ERC.lon.values.tolist()     # Longitude
+    y = df_NARR_ERC.lat.values.tolist()     # Latitude
+    t = df_NARR_ERC.time.tolist()    # Time
+    # print('x values from df_NARR_ERC.lon:\n', x)
+    # print('y values from df_NARR_ERC.lat:\n', y)
+    # print('t values from df_NARR_ERC.time:\n', t)
+
+    # Getting z values and building new dataframe with time index and ERC data.
+    z = df_NARR_ERC['ERC'].values.tolist()
+    d = [i for i in zip(t,x,y,z)]
+    print('d:\n', d)
+    df = pd.DataFrame(data=d, columns=['time','lon','lat','ERC'])
+    df.set_index('time', inplace=True)
+    print('df.index:\n', df.index)
+    print('df.index[10]:\n', df.index[10])
+
+    # Convert timepoint to build contour plot from ERC data
+    ERC_date = datetime.strptime(ERC_date, '%Y,%m,%d')
+    print('ERC_date:', ERC_date)
+    # Get the ERC data for the day specified
+    df_t0 = df[(df.index == ERC_date)]
+    # Split into constituents
+    x_t0 = df_t0['lon'].values.tolist()
+    y_t0 = df_t0['lat'].values.tolist()
+    z_t0 = df_t0['ERC'].values.tolist()
+    print('df_t0:\n', df_t0)
+    # print('Shape x_t0:\n', np.shape(x_t0))
+    # print('Shape y_t0:\n', np.shape(y_t0))
+    # print('Shape z_t0:\n', np.shape(z_t0))
+
+    plt.close()
+    f, ax = plt.subplots(1,2, figsize=(8,3), sharex=True, sharey=True)
+
+    ax[0].tripcolor(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # Plots across all timepoints?
+    ax[0].plot(x_t0, y_t0, 'ko ', markersize=1)
+    ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+
+    tcf = ax[1].tricontourf(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # 20 contour levels is good quality
+    ax[1].plot(x_t0, y_t0, 'ko ', markersize=1)
+    ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+    f.colorbar(tcf)
+
+    date_str = ERC_date.strftime('%b %d, %Y')
+    plt.suptitle('ERC Contour Plots: '+date_str)
+    
+    plt.savefig('ERC_contour.png', bbox_inches='tight')
+    plt.show()
+
+    df_NARR_ERC.reset_index(inplace=True)
+    df_NARR_ERC.set_index('lon', inplace=True)
+    print('df_NARR_ERC with lon index:\n', df_NARR_ERC)
+    # Specifying a longitude point, make this an
+    # actual longitude value in the future:
+    lon = -124.500
+    df_NARR_ERC_lon_lat_time_series = df_NARR_ERC.loc[lon]
+    print('df_NARR_ERC_lon_lat_time_series:\n', df_NARR_ERC_lon_lat_time_series)
+    
+    plt.close()
+    # Plotting three time series of df_NARR_ERC data at a lon-lat time:
+    # 1) H500 X and Y Gradients
+    # 2) PMSL X and Y Gradients 
+    # 3) CAPE
+    # 4) ERC
+    fig, ax = plt.subplots(1,4, figsize=(14,3))
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0], color='k')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0], color='g')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[1], color='gray')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[1], color='m')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='CAPE', ax=ax[2], color='orange')
+    df_NARR_ERC_lon_lat_time_series.plot(x='time', y='ERC', ax=ax[3], color='r')
+    ax[0].set_xlabel('Date')
+    ax[0].set_ylabel('H500 Grad at '+str(lon)+'deg, m/deg')
+    ax[0].set_title('Time Series: H500 Gradients')
+    ax[1].set_xlabel('Date')
+    ax[1].set_ylabel('PMSL Grad at '+str(lon)+'deg, hPa/deg')
+    ax[1].set_title('Time Series: PMSL Gradients')
+    ax[2].set_xlabel('Date')
+    ax[2].set_ylabel('CAPE at '+str(lon)+'deg, kJ/kg')
+    ax[2].set_title('Time Series: CAPE')
+    ax[3].set_xlabel('Date')
+    ax[3].set_ylabel('ERC at '+str(lon)+'deg, AR')
+    ax[3].set_title('Time Series: ERC')
+    plt.show()
+
+
+    return
+
+
 
 
 ''' Import pickle file, export as csv for SOM training in Julia '''
@@ -1310,16 +1328,16 @@ def synvarPickleToCSV(pickle_in_filename, csv_out_filename, cols_list):
     return
 
 
+''' --- Run import_csv, synvar_plot --- '''
+# import_NARR_csv(-125,-116,41,50, 2,'/home/dp/Documents/FWP/NARR/csv','/home/dp/Documents/FWP/NARR/pickle/')
+''' ----------------------------------- '''
+
 ''' ------ Import all gridMET CSVs ------ '''
 # import_gridMET_csv()
 ''' ------------------------------------- '''
 
-''' --- Run import_csv, synvar_plot --- '''
-# import_NARR_csv(-125,-116,41,50)
-''' ----------------------------------- '''
-
 ''' ------ Import all gridMET CSVs ------ '''
-# merge_NARR_gridMET('1979,1,1','1979,1,12')
+merge_NARR_gridMET('1979,1,1','1979,1,25')
 ''' ------------------------------------- '''
 
 ''' ------ Import all gridMET CSVs ------ '''
