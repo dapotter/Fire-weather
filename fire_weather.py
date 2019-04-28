@@ -67,7 +67,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, import_
     print('CAPE_files:\n', CAPE_files)
     print('PMSL_files:\n', PMSL_files)
 
-    all_NARR_files = [H500_files, CAPE_files, PMSL_files] # All file paths in a list of lists
+    all_NARR_files = [H500_files, CAPE_files, PMSL_files] # All file hpaths in a list of lists
     print('H500 file paths:\n', H500_files)
     print('All NARR file paths :\n', all_NARR_files)
     all_NARR_files = [sorted(file_list) for file_list in all_NARR_files]
@@ -950,10 +950,24 @@ def merge_NARR_gridMET(start_date, end_date):#lon_min, lon_max, lat_min, lat_max
     # which is then written to the NARR dataframe as a new column 'ERC'.
     # It's plotted and then pickled.
 
+    # Import gridMET ERC data for each day of 1979
     df_gridMET = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/df_erc.pkl')
     print('df_gridMET:\n', df_gridMET)
-    df_NARR = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_all_synvar_plus_gradients.pkl')
+
+    # Import NARR synoptic variable data for all of 1979
+    # Note: NARR_pkl_files are all pickle files named 'XX_df_all_synvar_plus_gradients.pkl'
+    import_NARR_pkls_from = '/home/dp/Documents/FWP/NARR/pickle/'
+    NARR_pkl_files = glob.glob(os.path.join(import_NARR_pkls_from, '*_df_all_synvar_plus_gradients.pkl'))
+    # Sorting the files so they go into the dataframe in the correct order
+    NARR_pkl_files = sorted(NARR_pkl_files)
+    print('NARR_pkl_files:\n', NARR_pkl_files)
+    # NARR_pkl_files = NARR_pkl_files[0:2] # Only select the first two
+    print('NARR_pkl_files:\n', NARR_pkl_files)
+    df_from_each_pickle_file = (pd.read_pickle(file) for file in NARR_pkl_files)
+    df_NARR = pd.concat(df_from_each_pickle_file, axis=0)
     print('df_NARR:\n', df_NARR)
+    print('df_NARR columns:\n', df_NARR.columns)
+
     time_window_hrs = 24 # Average NARR data over 24 hr period to match gridMET
 
     # gridMET converted to dates. Would add 2100 UTC to gridMET but not necessary
@@ -1242,7 +1256,7 @@ def plot_NARR_ERC(ERC_date):
     #       over the dataframe's entire time range
 
     df_NARR_ERC = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
-    print('df_NARR with ERC:\n', df_NARR_ERC)
+    print('df_NARR_ERC:\n', df_NARR_ERC)
 
     # WARNING: These x,y,t values are for all days in df_NARR_ERC.
     # Currently, df_NARR_ERC only covers Jan 1, 1979, and this
@@ -1258,11 +1272,10 @@ def plot_NARR_ERC(ERC_date):
     # Getting z values and building new dataframe with time index and ERC data.
     z = df_NARR_ERC['ERC'].values.tolist()
     d = [i for i in zip(t,x,y,z)]
-    print('d:\n', d)
+    # print('d:\n', d)
     df = pd.DataFrame(data=d, columns=['time','lon','lat','ERC'])
     df.set_index('time', inplace=True)
-    print('df.index:\n', df.index)
-    print('df.index[10]:\n', df.index[10])
+    print('df.index:\n', df.index[0:100])
 
     # Convert timepoint to build contour plot from ERC data
     ERC_date = datetime.strptime(ERC_date, '%Y,%m,%d')
@@ -1292,9 +1305,10 @@ def plot_NARR_ERC(ERC_date):
 
     date_str = ERC_date.strftime('%b %d, %Y')
     plt.suptitle('ERC Contour Plots: '+date_str)
-    
     plt.savefig('ERC_contour.png', bbox_inches='tight')
     plt.show()
+
+
 
     df_NARR_ERC.reset_index(inplace=True)
     df_NARR_ERC.set_index('lon', inplace=True)
@@ -1330,6 +1344,7 @@ def plot_NARR_ERC(ERC_date):
     ax[3].set_xlabel('Date')
     ax[3].set_ylabel('ERC at '+str(lon)+'deg, AR')
     ax[3].set_title('Time Series: ERC')
+    plt.savefig('NARR_ERC_Lon_Lat_Time_Series.png', bbox_inches='tight')
     plt.show()
 
 
@@ -1355,7 +1370,7 @@ def synvarPickleToCSV(pickle_in_filename, csv_out_filename, cols_list):
 
 
 ''' --- Run import_csv, synvar_plot --- '''
-import_NARR_csv(-125,-116,41,50, 2,'/home/dp/Documents/FWP/NARR/csv','/home/dp/Documents/FWP/NARR/pickle/')
+# import_NARR_csv(-125,-116,41,50, 2,'/home/dp/Documents/FWP/NARR/csv','/home/dp/Documents/FWP/NARR/pickle/')
 ''' ----------------------------------- '''
 
 ''' ------ Import all gridMET CSVs ------ '''
@@ -1363,11 +1378,11 @@ import_NARR_csv(-125,-116,41,50, 2,'/home/dp/Documents/FWP/NARR/csv','/home/dp/D
 ''' ------------------------------------- '''
 
 ''' ------ Import all gridMET CSVs ------ '''
-# merge_NARR_gridMET('1979,1,1','1979,1,25')
+# merge_NARR_gridMET('1979,1,1','1979,12,15')
 ''' ------------------------------------- '''
 
 ''' ------ Import all gridMET CSVs ------ '''
-# plot_NARR_ERC('1979,1,12')
+plot_NARR_ERC('1979,1,12')
 ''' ------------------------------------- '''
 
 ''' --- Run synvarPickleToCSV --- '''
