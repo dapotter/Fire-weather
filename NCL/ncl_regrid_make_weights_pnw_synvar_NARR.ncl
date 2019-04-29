@@ -150,6 +150,255 @@ begin
     print("x_reclin after adding file dimensions and attributes: ****************************")
     printVarSummary(x_reclin)
 
+    printVarSummary(lat)
+    printVarSummary(lon)
+
+;---Calculate gradients of x_reclin
+    dxdlon = center_finite_diff_n(x_reclin, lon, False, 0, 1)
+    dxdlat = center_finite_diff_n(x_reclin, lat, False, 0, 0)
+    print(dxdlon)
+    ;print(dxdlat)
+
+;---Name and assign dimensions to the gradient variables:
+    dxdlon!0    = "lat"      ; name the dimension
+    dxdlon&lat  = lat      ; assign lat to lat dimension
+    dxdlon!1    = "lon"      ; name the dimension
+    dxdlon&lon  = lon      ; assign lat to lat dimension
+    dxdlon@lv_ISBL0 = 500
+    dxdlon@units = "gpm/deg"
+    dxdlon@long_name = "Geopotential height lon gradient"
+    dxdlon@time = x@initial_time
+
+    dxdlat!0    = "lat"      ; name the dimension
+    dxdlat&lat  = lat      ; assign lat to lat dimension
+    dxdlat!1    = "lon"      ; name the dimension
+    dxdlat&lon  = lon      ; assign lat to lat dimension 
+    dxdlat@lv_ISBL0 = 500 
+    dxdlat@units = "gpm/deg"
+    dxdlat@long_name = "Geopotential height lat gradient"
+    dxdlat@time = x@initial_time
+
+    printVarSummary(dxdlat)
+    printVarSummary(dxdlon)
+
+
+
+    ;------------------------------------- EXPORT netCDF -------------------------------------
+
+    ;---------------------------------------------------
+    ; Create netCDF: http://www.ncl.ucar.edu/Applications/method_2.shtml
+    ;---------------------------------------------------
+    if (netCDF) then
+
+        system ("'rm' -f "+diro+filo)
+        ncdf  = addfile(diro+filo,"c")
+
+        ;---------------------------------------------------
+        ; create global attributes of the file
+        ;---------------------------------------------------
+        fAtt               = True            ; assign file attributes
+        fAtt@title         = "NARR: ESMF weighted regrid to 0.25 deg rectilinear"
+        fAtt@source        = "The North American Regional Reanalysis (NARR) Project"
+        fAtt@analysis_time = x@initial_time
+        fAtt@input_file    = fili
+        fAtt@Conventions   = "None"
+        fAtt@creation_date = systemfunc("date")
+
+        fileattdef( ncdf, fAtt )            ; copy file attributes
+
+        ;---------------------------------------------------
+        ; dimension names/sizes/attributes
+        ;---------------------------------------------------
+        dimNames = (/ "lat", "lon"/)
+        ; dimSizes = (/  klev , NLAT,  MLON /)
+        dimSizes = (/  nlat,  nlon /)
+        dimUnlim = (/ False, False /)
+        filedimdef(ncdf,dimNames,dimSizes,dimUnlim)
+
+        ; filevardef(ncdf, "lev"   ,typeof(lev)  , getvardims(lev))
+        filevardef(ncdf, "lat"      ,typeof(lat)     , getvardims(lat))
+        filevardef(ncdf, "lon"      ,typeof(lon)     , getvardims(lon))
+        filevardef(ncdf, "H500"     ,typeof(x_reclin), getvardims(x_reclin))
+        filevardef(ncdf, "H500GradX"   ,typeof(dxdlon)  , getvardims(dxdlon))
+        filevardef(ncdf, "H500GradY"   ,typeof(dxdlat)  , getvardims(dxdlat))
+
+        ;---------------------------------------------------
+        ; Copy attributes associated with each variable to the file
+        ; All attributes associated with each variable will be copied.
+        ;---------------------------------------------------
+        ; filevarattdef(ncdf,"lev"  ,lev  )                   ; copy lev attributes
+        filevarattdef(ncdf, "lat"   ,lat  )                   ; copy lat attributes
+        filevarattdef(ncdf, "lon"   ,lon  )                   ; copy lon attributes
+        filevarattdef(ncdf, "H500"  ,x_reclin )
+        filevarattdef(ncdf, "H500GradX", dxdlon )
+        filevarattdef(ncdf, "H500GradY", dxdlat )
+
+        ;---------------------------------------------------
+        ; Write values to the file
+        ;---------------------------------------------------
+        ; ncdf->lev    = (/ lev /)
+        ncdf->lat    = (/ lat /)
+        ncdf->lon    = (/ lon /)
+        ncdf->H500   = (/ x_reclin /)
+        ncdf->H500GradX = (/ dxdlon /)
+        ncdf->H500GradY = (/ dxdlat /)
+    end if
+
+
+    ;============================= Import netCDF and plot ==============================
+    ; This function makes three plots: H500, H500 Grad X, H500 Grad Y
+    ; They are titled "H500_OR_WA.png", "H500_Grad_X_OR_WA.png", etc
+    ;----------------------------------------------------------------------
+    ; latlon_subset_1.ncl
+    ;----------------------------------------------------------------------
+    ; Concepts illustrated:
+    ;   - Using coordinate subscripting to extract a lat/lon region
+    ;   - Subsetting a rectilinear grid
+    ;   - Drawing a lat/lon grid using gsn_coordinates
+    ;   - Attaching polymarkers to a map
+    ;   - Using lonFlip to convert 0 to 360 longitudes to -180 to 180
+    ;   - Zooming in on a particular area on a map
+    ;----------------------------------------------------------------------
+    ; The data file for this example can be downloaded from
+    ; http://www.ncl.ucar.edu/Applications/Data/#cdf
+    ;
+    ; For an example of subsetting data represented by 2D lat/lon arrays,
+    ; see latlon_subset_2.ncl and the "getind_latlon2d" function.
+    ;----------------------------------------------------------------------
+    ; These files are loaded by default in NCL V6.2.0 and newer
+    ; load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
+    ; load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
+
+    ;---Read in netCDF file:
+    ;a  = addfile("/home/dp/Documents/FWP/NARR/3D_grib1_exp/merged_AWIP32.1979010100.3D.nc", "r")
+    a  = addfile(diro+filo,"r")
+
+    fnames  = getfilevarnames(a)
+    print(fnames)
+
+    H500 = a->H500
+    H500GradX = a->H500GradX
+    H500GradY = a->H500GradY
+
+    printVarSummary(H500)
+    printVarSummary(H500GradX)
+    printVarSummary(H500GradY)
+
+
+    ;---Save resulting plot as H500_OR_WA.png:
+    wks = gsn_open_wks("png","H500_OR_WA")
+
+    ;---Specify lon lat subset:
+    lat_min =   39
+    lat_max =   52
+    lon_min =   233;-114
+    lon_max =   246;-127
+
+
+    ;---H500:
+    H500_sub  := H500({lat_min:lat_max},{lon_min:lon_max})
+    printVarSummary(H500_sub)
+
+    ;---Setting some resources
+    res                 = True
+    res@gsnMaximize     = True     ; maximize plot in frame
+    res@cnFillOn        = True     ; turn on contour fill
+    res@cnLinesOn       = False    ; turn off contour lines
+    res@cnLineLabelsOn  = False    ; turn off contour line labels
+    res@tiMainString    = "Plotting lat/lon subset of data"
+    res@pmTitleZone     = 4        ; Moves title down
+    res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
+    res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
+
+    ;---Recalculate values for new min/max lon/lon and create new plot
+    res@gsnDraw       = False 
+    res@gsnFrame      = False
+    res@mpMinLatF     = min(H500_sub&lat)-2
+    res@mpMaxLatF     = max(H500_sub&lat)+2
+    res@mpMinLonF     = min(H500_sub&lon)-2
+    res@mpMaxLonF     = max(H500_sub&lon)+2
+    res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
+    res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
+
+    ;---Plot:
+    plt = gsn_csm_contour_map(wks,H500_sub,res)
+    draw(plt)
+    frame(wks)
+
+
+
+    ;---H500 Grad X:
+    wks = gsn_open_wks("png","H500_Grad_X_OR_WA")
+
+    H500GradX_sub  := H500GradX({lat_min:lat_max},{lon_min:lon_max})
+    printVarSummary(H500GradX_sub)
+    ;---Setting some resources
+    res                 = True
+    res@gsnMaximize     = True     ; maximize plot in frame
+    res@cnFillOn        = True     ; turn on contour fill
+    res@cnLinesOn       = False    ; turn off contour lines
+    res@cnLineLabelsOn  = False    ; turn off contour line labels
+    res@tiMainString    = "Plotting lat/lon subset of zonal gradient"
+    res@pmTitleZone     = 4        ; Moves title down
+    res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
+    res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
+
+    ;---Recalculate values for new min/max lon/lon and create new plot
+    res@gsnDraw       = False 
+    res@gsnFrame      = False
+    res@mpMinLatF     = min(H500_sub&lat)-2
+    res@mpMaxLatF     = max(H500_sub&lat)+2
+    res@mpMinLonF     = min(H500_sub&lon)-2
+    res@mpMaxLonF     = max(H500_sub&lon)+2
+    res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
+    res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
+
+    ;---Plot:
+    plt = gsn_csm_contour_map(wks,H500GradX_sub,res)
+    draw(plt)
+    frame(wks)
+
+
+
+    ;---H500 Grad Y:
+    wks = gsn_open_wks("png","H500_Grad_Y_OR_WA")
+
+    H500GradY_sub  := H500GradY({lat_min:lat_max},{lon_min:lon_max})
+    printVarSummary(H500GradY_sub)
+    ;---Setting some resources
+    res                 = True
+    res@gsnMaximize     = True     ; maximize plot in frame
+    res@cnFillOn        = True     ; turn on contour fill
+    res@cnLinesOn       = False    ; turn off contour lines
+    res@cnLineLabelsOn  = False    ; turn off contour line labels
+    res@tiMainString    = "Plotting lat/lon subset of meridional gradient"
+    res@pmTitleZone     = 4        ; Moves title down
+    res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
+    res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
+
+    ;---Recalculate values for new min/max lon/lon and create new plot
+    res@gsnDraw       = False 
+    res@gsnFrame      = False
+    res@mpMinLatF     = min(H500_sub&lat)-2
+    res@mpMaxLatF     = max(H500_sub&lat)+2
+    res@mpMinLonF     = min(H500_sub&lon)-2
+    res@mpMaxLonF     = max(H500_sub&lon)+2
+    res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
+    res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
+
+    ;---Plot:
+    plt = gsn_csm_contour_map(wks,H500GradY_sub,res)
+    draw(plt)
+    frame(wks)
+
+
+
+
+
+
+
+
+
 
 ;======================================================================
 ; Part B: Generate Rectilinear to NARR regrid weights 
@@ -265,126 +514,6 @@ begin
 
 
 
-;------------------------------------- EXPORT netCDF -------------------------------------
 
-;---------------------------------------------------
-; Create netCDF: http://www.ncl.ucar.edu/Applications/method_2.shtml
-;---------------------------------------------------
-  if (netCDF) then
-
-      system ("'rm' -f "+diro+filo)
-      ncdf  = addfile(diro+filo,"c")
-
-;---------------------------------------------------
-; create global attributes of the file
-;---------------------------------------------------
-     fAtt               = True            ; assign file attributes
-     fAtt@title         = "NARR: ESMF weighted regrid to 0.25 deg rectilinear"
-     fAtt@source        = "The North American Regional Reanalysis (NARR) Project"
-     fAtt@analysis_time = x@initial_time
-     fAtt@input_file    = fili
-     fAtt@Conventions   = "None"
-     fAtt@creation_date = systemfunc ("date")
-
-     fileattdef( ncdf, fAtt )            ; copy file attributes
-
-;---------------------------------------------------
-; dimension names/sizes/attributes
-;---------------------------------------------------
-     dimNames = (/ "lat", "lon" /)
-     ; dimSizes = (/  klev , NLAT,  MLON /)
-     dimSizes = (/  nlat,  nlon /)
-     dimUnlim = (/ False,False/)
-     filedimdef(ncdf,dimNames,dimSizes,dimUnlim)
-
-     ; filevardef(ncdf, "lev"   ,typeof(lev)  , getvardims(lev))
-     filevardef(ncdf, "lat"   ,typeof(lat)  , getvardims(lat))
-     filevardef(ncdf, "lon"   ,typeof(lon)  , getvardims(lon))
-     filevardef(ncdf, "H500"  ,typeof(x_reclin)  , getvardims(x_reclin))
-
-;---------------------------------------------------
-; Copy attributes associated with each variable to the file
-; All attributes associated with each variable will be copied.
-;---------------------------------------------------
-     ; filevarattdef(ncdf,"lev"  ,lev  )                   ; copy lev attributes
-     filevarattdef(ncdf,"lat"  ,lat  )                   ; copy lat attributes
-     filevarattdef(ncdf,"lon"  ,lon  )                   ; copy lon attributes
-     filevarattdef(ncdf,"H500" ,x_reclin )
-
-;---------------------------------------------------
-; Write values to the file
-;---------------------------------------------------
-     ; ncdf->lev    = (/ lev   /)
-     ncdf->lat    = (/ lat   /)
-     ncdf->lon    = (/ lon   /)
-     ncdf->H500      = (/ x_reclin   /)
-  end if
 
 end
-
-; ;************************************************
-; ; create plots
-; ;************************************************  
-;     wks = gsn_open_wks("png","ncl_regrid_make_weights_pnw_synvar_NARR")      ; send graphics to PNG file
-;     plot = new(3,graphic)                      ; create a plot array
-    
-;     res                      = True
-;     res@gsnDraw              = False           ; don't draw
-;     res@gsnFrame             = False           ; don't advance frame
-;     res@gsnAddCyclic         = False           ; regional data
-  
-;     res@cnInfoLabelOn        = False           ; turn off cn info label
-;     res@cnFillOn             = True            ; turn on color
-;    ;res@cnFillMode           = "RasterFill"
-;     res@cnLinesOn            = False
-;     res@cnLineLabelsOn       = False
-;     res@lbLabelBarOn         = False           ; turn off individual cb's
-  
-;     res@mpMinLatF            = min(lat2d)      ; range to zoom in on
-;     res@mpMaxLatF            = max(lat2d)
-;     res@mpMinLonF            = min(lon2d)
-;     res@mpMaxLonF            = max(lon2d)
-;     res@mpCenterLonF         = -107.0          ; from file (253-360)
-;     res@mpFillOn             = False
-;    ;res@mpGridAndLimbOn      = True
-;    ;res@mpGridLineDashPattern= 10                 ; lat/lon lines as dashed
-    
-;     res@gsnLeftString = ""
-;     res@gsnRightString= ""
-      
-;     res@gsnCenterString= "Source NARR"
-;     plot(0) = gsn_csm_contour_map(wks,x        ,res) 
-;     res@gsnCenterString= "NARR => 0.25 Rectilinear Grid"
-;     plot(1) = gsn_csm_contour_map(wks,x_regrid ,res) 
-;     res@gsnCenterString= "0.25 Rectilinear Grid => NARR"
-;     plot(2) = gsn_csm_contour_map(wks,x_reclin ,res) 
-
-; ;************************************************
-; ; create panel
-; ;************************************************
-;     resP                     = True                ; modify the panel plot
-;     resP@gsnPanelMainString  = x@long_name+": "+hlvl+"hPa: "+InterpMethod
-;     resP@gsnPanelLabelBar    = True                ; add common colorbar
-;     resP@gsnMaximize         = True  
-;     gsn_panel(wks,plot,(/3,1/),resP)               ; now draw as one plot
-
-; ;************************************************
-; ; Calculate difference
-; ;************************************************
-
-;     diff = x
-;     diff = x_regrid-x 
-;     diff@long_name = "Difference (Regrid-Source): "+hlvl+"hPa" 
-
-;     res@gsnDraw              = True
-;     res@gsnFrame             = True
-;     res@lbLabelBarOn         = True 
-;     delete(res@gsnCenterString)
-
-;     res@cnLevelSelectionMode = "ManualLevels"     ; set manual contour levels
-;     res@cnMinLevelValF       = -0.1               ; set min contour level
-;     res@cnMaxLevelValF       =  0.1               ; set max contour level
-;     res@cnLevelSpacingF      =  0.025             ; set contour spacing
-
-;     res@tiMainString         = diff@long_name+": "+InterpMethod          
-;     plt  = gsn_csm_contour_map(wks,diff     ,res)
