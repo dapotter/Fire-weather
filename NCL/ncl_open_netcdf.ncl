@@ -10,7 +10,11 @@ begin
     ;f = addfile("/home/dp/Documents/FWP/NARR/flx_grib1_exp/merged_AWIP32.1979010121.RS.flx.grib1","r")
     ;f = addfile("/home/dp/Documents/FWP/NARR/sfc_grib1_exp/merged_AWIP32.1979010100.RS.sfc.grib1", "r")
     
-    f = addfile("/home/dp/Documents/FWP/gridMET/erc_1979.nc", "r")
+    ; ERC file:
+    ; f = addfile("/home/dp/Documents/FWP/gridMET/erc_1979.nc", "r")
+    
+    ; netCDF rectilinear file:
+    f = addfile("/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/merged_AWIP32.1979010100.3D.nc", "r")
     
     ;---Variables:
     ;v = f->HGT_221_ISBL    ; 3D file - Geopotential height
