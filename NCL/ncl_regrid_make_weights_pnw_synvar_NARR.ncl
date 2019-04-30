@@ -15,183 +15,203 @@ load "$NCARG_ROOT/lib/ncarg/nclscripts/esmf/ESMF_regridding.ncl"
 
 begin
 ;======================================================================
-; Part A: Generate NARR to Rectilinear regrid weights 
+; Part A: Generate NARR to Rectilinear regrid weights
 ;         Note: The NARR has grid points with missing values
 ;======================================================================
-
-
-    InterpMethod = "bilinear"                           ; "bilinear", "conserve"
-
-    ;hlvl         = 700                                  ; arbitrary pressure level
-    hlvl         = 500                                  ; arbitrary pressure level
-                                
-;---Input file
-    ;srcDirName   = "./"
-    ;srcFileName  = "merged_AWIP32.1979010100.3D.NARR.grb"
-    ;srcFilePath  =  srcDirName + srcFileName
+;~~~~~~~~~~~~~~ ENTER grib1 FILES DIRECTORY HERE ~~~~~~~~~~~~~~~~~
+;~~~~~~~~~~~~~~  Directory needs to end with /"  ~~~~~~~~~~~~~~~~~
     
-    srcDirName   = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"
-    ;srcFileName  = "merged_AWIP32.1979010609.3D.grib1"
-    srcFileName  = "merged_AWIP32.1979010100.3D"
-    srcFileSuffix = ".grib1"
+    ;-------  Laptop NARR data directories  -------
 
-    srcFilePath  =  srcDirName + srcFileName + srcFileSuffix
+    cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
+    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
 
-    netCDF = True 
-    if (netCDF) then
-        ;diro  = "./"                                      ; output directory
-        fili  = srcFileName + srcFileSuffix
-        diro  = srcDirName
-        filo  = srcFileName + ".nc" ;merged_AWIP32.1979010100.3D.NARR.nc" ; output netCDF file
-    end if
+    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/"       ; flx is PMSL: directory Jan 1-3 files
+    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/"
+
+    ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/"       ; pbl is CAPE: directory Jan 1-3 files
+    ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/"   ; pbl is CAPE: directory June 1-3 files
     
+    ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of vars: directory Jan 1-3 files
 
-;---Get the variable to be regridded;  only need one level to generate the weight
-;---Also, the grid coordinates
 
-    sfile =  addfile(srcFilePath,"r")    
-    ;x     = sfile->TMP_221_ISBL({hlvl},:,:)    ;  ( gridx_221, gridy_221) ; (   277,349)
-    x     = sfile->HGT_221_ISBL({hlvl},:,:)    ;  ( gridx_221, gridy_221) ; (   277,349)
-    lat2d = sfile->gridlat_221                 ; (gridx_221, gridy_221)
-    lon2d = sfile->gridlon_221
-    lev   = sfile->lv_ISBL0
-
-    nmsg  = num(ismissing(x))                   ; # of msg values
-    printVarSummary(x)
-    print("x: min="+min(x)+"   max="+max(x)+"    nmsg="+nmsg)
-    print(" ")
-    print("lat2d: min="+min(lat2d)+"   max="+max(lat2d))
-    print("lon2d: min="+min(lon2d)+"   max="+max(lon2d))
-
-    lon2d   = where(lon2d.lt.0, lon2d+360, lon2d) ; graphical convenience
-    print("lon2d: min="+min(lon2d)+"   max="+max(lon2d))
-
-    x@lat2d = lat2d                            ; These attributes will be used by
-    x@lon2d = lon2d                            ; ESMF_regrid for the source grid
+    ;-------  Seagate NARR data directories  -------
     
-;---Create the destination rectilinear lat[*]/lon[*] arrays. 
-;---Here, roughly the same resolution as the source grid at 45N.
-;---This is arbitrary. It can be whatever the user desires.
-;---For example, it could be just the area of the USA.
-;---Create rectilinear coordinates; monotonically increasing 
+    ; cdir = "/mnt/seagate/NARR/3D_grib1/"                    ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/flx/"                         ; Seagate  - NARR data - flx - PMSL
+    ; cdir = "/mnt/seagate/NARR/pbl/"                         ; Seagate  - NARR data - pbl - CAPE
 
-    ; nlat  = 337
-    ; nlon  = 831
-    ; lat   = fspan(   1.0, 85.0 ,nlat)
-    ; lon   = fspan( 150.0,358.5 ,nlon)
+    ; SYNVAR             = "HGT_221_ISBL"
+    SYNVAR             = "H500"
+    ; SYNVAR             = "PRMSL_221_MSL"
+    ; SYNVAR             = "CAPE_221_SPDY"
 
-    nlat  = 52
-    nlon  = 52
-    lat   = fspan(  39.0, 52.0 ,nlat)
-    lon   = fspan( 233.0,246.0 ,nlon)
+    lvl         = 500                                  ; arbitrary pressure level for H500
 
-;---For netCDF
-    lat!0         = "lat"
-    lat@units     = "degrees_north"
-    lat&lat       = lat
-
-    lon!0         = "lon"
-    lon@units     = "degrees_east"
-    lon&lon       = lon
-
-    lev!0         = "lev"
-
-;---Create regrid options
-
-    Opt                = True
-    Opt@SrcTitle       = "NARR grid"   ; optional
-    Opt@WgtFileName    = "NARR_to_Rect.WgtFile_"+InterpMethod+".nc"
-
-;---Generate the names of the files containing the source and destination grid descriptions
-;---Remove after Part A is complete
-
-    Opt@SrcFileName    = "NARR.SCRIP_grid_description.nc"         ; Name of source and
-    Opt@SrcRegional    = True
+    SYNABBR            = "H500"
+    ; SYNABBR            = "PMSL"
+    ; SYNABBR            = "CAPE"
+ 
+    ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
+    ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     
-;---If source data contains missing values, set the 
-;---special SrcMask2D option to indicate the missing values 
+    cmd = "cd "+cdir+" ; ls *.grib1"
 
-    Opt@SrcMask2D  = where(ismissing(x),0,1)
-
-    DstDirName         = "./"
-    Opt@DstFileName    = DstDirName + "Rectilinear.SCRIP_grid_description.nc" 
-    Opt@DstGridType    = "rectilinear"
-    Opt@DstGridLat     = lat
-    Opt@DstGridLon     = lon
-    Opt@DstRegional    = True
-
-;---Specify other options  
-
-    Opt@ForceOverwrite = True
-    Opt@InterpMethod   = InterpMethod
-    Opt@RemoveSrcFile  = True                  ; remove SCRIP grid destination files
-    Opt@RemoveDstFile  = True 
-    Opt@NoPETLog       = True                  ; 6.2.1 onward
-
-;---Perform the regrid: NARR ==> rectilinear (_reclin)
-
-    x_reclin = ESMF_regrid(x, Opt)             ; Do the regridding for x  
-
-    mmsg  = num(ismissing(x_reclin))           ; # of msg values
-    print("x_reclin before adding file dimensions and attributes: ****************************")
-    printVarSummary(x_reclin)
-    print("x_reclin: min="+min(x_reclin)+"   max="+max(x_reclin)+"    mmsg="+mmsg)
+    print(cmd)
+    file_list = systemfunc(cmd)
+    print("*********************************************file_list(0)="+file_list(0))
+    nfiles = dimsizes(file_list)
+    print("nfiles="+nfiles)
     
-;---For netCDF
-    ; x_reclin!0         = "lev"
-    ; x_reclin&lev       =  lev
-    ; x_reclin!1         = "lat"
-    ; x_reclin&lat       =  lat
-    ; x_reclin!2         = "lon"
-    ; x_reclin&lon       =  lon
-    ; x_reclin@units     = x@units
-    ; x_reclin@long_name = x@long_name
-    ; x_reclin@time      = x@initial_time
-    print("x_reclin after adding file dimensions and attributes: ****************************")
-    printVarSummary(x_reclin)
+    ;---Loads all files into f
+    f = addfiles(cdir + file_list, "r")
 
-    printVarSummary(lat)
-    printVarSummary(lon)
+    ;---Specify directories for netCDF export and then import for plotting
+    diri_name   = cdir
+    diro_name   = cdir + "nc/"
 
-;---Calculate gradients of x_reclin
-    dxdlon = center_finite_diff_n(x_reclin, lon, False, 0, 1)
-    dxdlat = center_finite_diff_n(x_reclin, lat, False, 0, 0)
-    print(dxdlon)
-    ;print(dxdlat)
+    endfile = nfiles-1
+    c = 0
+    do i = 0, nfiles-1
+        print("~~~~~~ Currently processing "+file_list(i)+" ~~~~~~")
 
-;---Name and assign dimensions to the gradient variables:
-    dxdlon!0    = "lat"      ; name the dimension
-    dxdlon&lat  = lat      ; assign lat to lat dimension
-    dxdlon!1    = "lon"      ; name the dimension
-    dxdlon&lon  = lon      ; assign lat to lat dimension
-    dxdlon@lv_ISBL0 = 500
-    dxdlon@units = "gpm/deg"
-    dxdlon@long_name = "Geopotential height lon gradient"
-    dxdlon@time = x@initial_time
+    ;---This loops converts all grib1 into nc                     
+    ;---Input file
+        fili_name  = file_list(i) ; "merged_AWIP32.1979010100.3D.grib1"
+        fili  =  diri_name + fili_name
+        filo  =  diro_name + fili_name + ".nc" ; output netCDF
+        
+    ;---Get the variable to be regridded;  only need one level to generate the weight
+    ;---Also, the grid coordinates
+        x     = f[i]->HGT_221_ISBL({lvl},:,:)    ;  ( gridx_221, gridy_221) ; (   277,349)
+        lat2d = f[i]->gridlat_221                 ; (gridx_221, gridy_221)
+        lon2d = f[i]->gridlon_221
 
-    dxdlat!0    = "lat"      ; name the dimension
-    dxdlat&lat  = lat      ; assign lat to lat dimension
-    dxdlat!1    = "lon"      ; name the dimension
-    dxdlat&lon  = lon      ; assign lat to lat dimension 
-    dxdlat@lv_ISBL0 = 500 
-    dxdlat@units = "gpm/deg"
-    dxdlat@long_name = "Geopotential height lat gradient"
-    dxdlat@time = x@initial_time
+        nmsg  = num(ismissing(x))                   ; # of msg values
+        printVarSummary(x)
+        print("x: min="+min(x)+"   max="+max(x)+"    nmsg="+nmsg)
+        print(" ")
+        print("lat2d: min="+min(lat2d)+"   max="+max(lat2d))
+        print("lon2d: min="+min(lon2d)+"   max="+max(lon2d))
 
-    printVarSummary(dxdlat)
-    printVarSummary(dxdlon)
+        lon2d   = where(lon2d.lt.0, lon2d+360, lon2d) ; graphical convenience
+        print("lon2d: min="+min(lon2d)+"   max="+max(lon2d))
 
+        x@lat2d = lat2d                            ; These attributes will be used by
+        x@lon2d = lon2d                            ; ESMF_regrid for the source grid
+        
+    ;---Create the destination rectilinear lat[*]/lon[*] arrays. 
+    ;---Here, roughly the same resolution as the source grid at 45N.
+    ;---This is arbitrary. It can be whatever the user desires.
+    ;---For example, it could be just the area of the USA.
+    ;---Create rectilinear coordinates; monotonically increasing
 
+        nlat  = 52
+        nlon  = 52
+        lat   = fspan(  39.0, 52.0 ,nlat)
+        lon   = fspan( 233.0,246.0 ,nlon)
 
-    ;------------------------------------- EXPORT netCDF -------------------------------------
+    ;---For netCDF
 
-    ;---------------------------------------------------
-    ; Create netCDF: http://www.ncl.ucar.edu/Applications/method_2.shtml
-    ;---------------------------------------------------
-    if (netCDF) then
+        lat!0         = "lat"
+        lat@units     = "degrees_north"
+        lat&lat       = lat
 
-        system ("'rm' -f "+diro+filo)
-        ncdf  = addfile(diro+filo,"c")
+        lon!0         = "lon"
+        lon@units     = "degrees_east"
+        lon&lon       = lon
+
+        ;lev!0         = "lev"
+        ;lev&lev       = lev
+
+        if(i .eq. 0) then
+            ;--- Only create the ESMF weights file once during the
+            ;--- first file processing
+        ;---Create regrid options
+
+            InterpMethod = "bilinear"                           ; "bilinear", "conserve"
+            Opt                = True
+            Opt@SrcTitle       = "NARR grid"   ; optional
+            Opt@WgtFileName    = "NARR_to_Rect.WgtFile_"+InterpMethod+".nc"
+
+        ;---Generate the names of the files containing the source and destination grid descriptions
+        ;---Remove after Part A is complete
+
+            Opt@SrcFileName    = "NARR.SCRIP_grid_description.nc"         ; Name of source and
+            Opt@SrcRegional    = True
+            
+        ;---If source data contains missing values, set the 
+        ;---special SrcMask2D option to indicate the missing values 
+
+            Opt@SrcMask2D  = where(ismissing(x),0,1)
+
+            DstDirName         = "./"
+            Opt@DstFileName    = DstDirName + "Rectilinear.SCRIP_grid_description.nc" 
+            Opt@DstGridType    = "rectilinear"
+            Opt@DstGridLat     = lat
+            Opt@DstGridLon     = lon
+            Opt@DstRegional    = True
+
+        ;---Specify other options  
+
+            Opt@ForceOverwrite = True
+            Opt@InterpMethod   = InterpMethod
+            Opt@RemoveSrcFile  = True                  ; remove SCRIP grid destination files
+            Opt@RemoveDstFile  = True 
+            Opt@NoPETLog       = True                  ; 6.2.1 onward
+        end if
+
+    ;---Perform the regrid: NARR ==> rectilinear (_reclin)
+        x_reclin = ESMF_regrid(x, Opt)             ; Do the regridding for x  
+
+        mmsg  = num(ismissing(x_reclin))           ; # of msg values
+        print("x_reclin before adding file dimensions and attributes: ****************************")
+        printVarSummary(x_reclin)
+        print("x_reclin: min="+min(x_reclin)+"   max="+max(x_reclin)+"    mmsg="+mmsg)
+        
+    ;---For netCDF
+        print("x_reclin after adding file dimensions and attributes: ****************************")
+        printVarSummary(x_reclin)
+        ;printVarSummary(lat)
+        ;printVarSummary(lon)
+
+    ;---Calculate gradients of x_reclin
+        dxdlon = center_finite_diff_n(x_reclin, lon, False, 0, 1)
+        dxdlat = center_finite_diff_n(x_reclin, lat, False, 0, 0)
+        ;print(dxdlon)
+        ;print(dxdlat)
+
+    ;---Name and assign dimensions to the gradient variables:
+        dxdlon!0    = "lat"      ; name the dimension
+        dxdlon&lat  = lat      ; assign lat to lat dimension
+        dxdlon!1    = "lon"      ; name the dimension
+        dxdlon&lon  = lon      ; assign lat to lat dimension
+        dxdlon@lv_ISBL0 = 500
+        dxdlon@units = "gpm/deg"
+        dxdlon@long_name = "Geopotential height lon gradient"
+        dxdlon@time = x@initial_time
+
+        dxdlat!0    = "lat"      ; name the dimension
+        dxdlat&lat  = lat      ; assign lat to lat dimension
+        dxdlat!1    = "lon"      ; name the dimension
+        dxdlat&lon  = lon      ; assign lat to lat dimension 
+        dxdlat@lv_ISBL0 = 500 
+        dxdlat@units = "gpm/deg"
+        dxdlat@long_name = "Geopotential height lat gradient"
+        dxdlat@time = x@initial_time
+
+        printVarSummary(dxdlat)
+        printVarSummary(dxdlon)
+
+        ;------------------------------------- EXPORT netCDF -------------------------------------
+
+        ;---------------------------------------------------
+        ; Create netCDF: http://www.ncl.ucar.edu/Applications/method_2.shtml
+        ;---------------------------------------------------
+
+        system ("'rm' -f "+filo)
+        ncdf  = addfile(filo,"c")
 
         ;---------------------------------------------------
         ; create global attributes of the file
@@ -200,7 +220,7 @@ begin
         fAtt@title         = "NARR: ESMF weighted regrid to 0.25 deg rectilinear"
         fAtt@source        = "The North American Regional Reanalysis (NARR) Project"
         fAtt@analysis_time = x@initial_time
-        fAtt@input_file    = fili
+        fAtt@input_file    = fili_name
         fAtt@Conventions   = "None"
         fAtt@creation_date = systemfunc("date")
 
@@ -242,8 +262,10 @@ begin
         ncdf->H500   = (/ x_reclin /)
         ncdf->H500GradX = (/ dxdlon /)
         ncdf->H500GradY = (/ dxdlat /)
-    end if
 
+        print("progress: "+i+"/"+endfile)
+
+    end do
 
     ;============================= Import netCDF and plot ==============================
     ; This function makes three plots: H500, H500 Grad X, H500 Grad Y
@@ -271,7 +293,8 @@ begin
 
     ;---Read in netCDF file:
     ;a  = addfile("/home/dp/Documents/FWP/NARR/3D_grib1_exp/merged_AWIP32.1979010100.3D.nc", "r")
-    a  = addfile(diro+filo,"r")
+    ;---This is the last file out from the loop above
+    a  = addfile(filo,"r")
 
     fnames  = getfilevarnames(a)
     print(fnames)
@@ -284,7 +307,6 @@ begin
     printVarSummary(H500GradX)
     printVarSummary(H500GradY)
 
-
     ;---Save resulting plot as H500_OR_WA.png:
     wks = gsn_open_wks("png","H500_OR_WA")
 
@@ -293,7 +315,6 @@ begin
     lat_max =   52
     lon_min =   233;-114
     lon_max =   246;-127
-
 
     ;---H500:
     H500_sub  := H500({lat_min:lat_max},{lon_min:lon_max})
@@ -394,12 +415,6 @@ begin
 
 
 
-
-
-
-
-
-
 ;======================================================================
 ; Part B: Generate Rectilinear to NARR regrid weights 
 ;         This interpolates the above grid to the NARR Grid.
@@ -483,7 +498,7 @@ begin
 ; create panel
 ;************************************************
     resP                     = True                ; modify the panel plot
-    resP@txString            = x@long_name+": "+hlvl+"hPa: "+InterpMethod
+    resP@txString            = x@long_name+": "+lvl+"hPa: "+InterpMethod
     resP@gsnPanelLabelBar    = True                ; add common colorbar
     resP@gsnMaximize         = True  
     gsn_panel(wks,plot,(/3,1/),resP)               ; now draw as one plot
@@ -494,7 +509,7 @@ begin
 
     diff = x
     diff = x_regrid-x 
-    diff@long_name = "Difference (Regrid-Source): "+hlvl+"hPa" 
+    diff@long_name = "Difference (Regrid-Source): "+lvl+"hPa" 
 
     res@gsnDraw              = True
     res@gsnFrame             = True
@@ -509,11 +524,6 @@ begin
     res@tiMainString         = diff@long_name+": "+InterpMethod          
     plt  = gsn_csm_contour_map(wks,diff     ,res)
 ;****************************************************************************************
-
-
-
-
-
 
 
 end
