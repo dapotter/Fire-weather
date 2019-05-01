@@ -1396,22 +1396,22 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
         # This loop goes through every date and interpolates gridMET ERC
         # values to the NARR grid using nearest neighbor interpolation.
         # df_gridMET and df_NARR matching the date are copied to
-        # df_gridMET_date and df_NARR_date. Interpolation is performed
+        # df_plot_date and df_NARR_date. Interpolation is performed
         # on these dataframes.
         # The interpolated ERC values are copied to df_NARR_date['ERC']
         # and then concatenated to df_NARR_ERC.
         # -------------------------------------------------------------------
 
-        df_gridMET_date = df_gridMET[df_gridMET['time'] == d]
+        df_plot_date = df_gridMET[df_gridMET['time'] == d]
         df_NARR_date = df_NARR[df_NARR['time'] == d]
-        print('df_gridMET_date:\n', df_gridMET_date)
+        print('df_plot_date:\n', df_plot_date)
         print('df_NARR_date:\n', df_NARR_date)
-        print('df_gridMET_date shape:\n', np.shape(df_gridMET_date.values))
+        print('df_plot_date shape:\n', np.shape(df_plot_date.values))
         print('df_NARR_date shape:\n', np.shape(df_NARR_date.values))
 
         # # PLOT 1: Plotting NARR grid over gridMET grid:
         # plt.figure()
-        # plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
+        # plt.scatter(x=df_plot_date.lon, y=df_plot_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
         # plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
         # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
         # plt.title('NARR grid after removing out-of-bounds points')
@@ -1421,11 +1421,11 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
 
         # Changing invalid data points to values the interpolation
         # algorithm can interpolate to:
-        ########################## df_gridMET_date.replace(-32767, 1.0123456789, inplace=True)
+        ########################## df_plot_date.replace(-32767, 1.0123456789, inplace=True)
 
         # Clip NARR grid to min and max lon lat values in the gridMET grid
-        x_min = min(df_gridMET_date['lon'].values); x_max = max(df_gridMET_date['lon'].values)
-        y_min = min(df_gridMET_date['lat'].values); y_max = max(df_gridMET_date['lat'].values)
+        x_min = min(df_plot_date['lon'].values); x_max = max(df_plot_date['lon'].values)
+        y_min = min(df_plot_date['lat'].values); y_max = max(df_plot_date['lat'].values)
         print('x_min:\n', x_min)
         print('x_max:\n', x_max)
         print('y_min:\n', y_min)
@@ -1440,7 +1440,7 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
 
         # # PLOT 2: Plotting NARR grid where it overlaps with gridMET:
         # plt.figure()
-        # plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
+        # plt.scatter(x=df_plot_date.lon, y=df_plot_date.lat, c='white', s=8, marker='o', edgecolors='g', label='gridMET grid')
         # plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, c='k', s=8, marker='+', edgecolors='g', label='NARR grid')
         # plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
         # plt.title('NARR grid after removing out-of-bounds points')
@@ -1449,9 +1449,9 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
         # plt.show()
 
         # Define x y and z for interpolation:
-        x = df_gridMET_date.lon.values
-        y = df_gridMET_date.lat.values
-        z = df_gridMET_date.erc.values
+        x = df_plot_date.lon.values
+        y = df_plot_date.lat.values
+        z = df_plot_date.erc.values
         xi = df_NARR_date.lon.values
         yi = df_NARR_date.lat.values
         print('ERC values:\n x:\n{}\n y:\n{}\n z:\n{}\n'.format(x, y, z))
@@ -1461,11 +1461,11 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
         
         # Interpolation:
         would_you_be_my_neighbor = 5
-        gridMET_shape = np.shape(df_gridMET_date.values[:,0:2])
+        gridMET_shape = np.shape(df_plot_date.values[:,0:2])
         NARR_shape = np.shape(df_NARR_date.values[:,0:2])
         print('gridMET shape:', gridMET_shape)
         print('NARR shape:', NARR_shape)
-        tree = neighbors.KDTree(df_gridMET_date.values[:,0:2], leaf_size=2)
+        tree = neighbors.KDTree(df_plot_date.values[:,0:2], leaf_size=2)
         dist, ind = tree.query(df_NARR_date.values[:,0:2], k=would_you_be_my_neighbor)
         print('indices:', ind)  # indices of 3 closest neighbors
         print('distances:', dist)  # distances to 3 closest neighbors
@@ -1484,8 +1484,8 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
         if d == date_list[-1]: # Only plot if on last date in date_list
             plt.close()
             plt.figure()
-            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
-            plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
+            plt.scatter(x=df_plot_date.lon, y=df_plot_date.lat, color='white', marker='o', edgecolors='g', s=df_plot_date.erc/3, label='gridMET')
+            plt.scatter(x=df_plot_date.lon.iloc[np.ravel(ind)], y=df_plot_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
             plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
             plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
             plt.title('Nearest gridMET points using interpolated indices')
@@ -1493,8 +1493,8 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
             plt.savefig('NARR_gridMET_before_interp.png', bbox_inches='tight')
             plt.show()
 
-            plt.scatter(x=df_gridMET_date.lon, y=df_gridMET_date.lat, color='white', marker='o', edgecolors='g', s=df_gridMET_date.erc/3, label='gridMET')
-            plt.scatter(x=df_gridMET_date.lon.iloc[np.ravel(ind)], y=df_gridMET_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
+            plt.scatter(x=df_plot_date.lon, y=df_plot_date.lat, color='white', marker='o', edgecolors='g', s=df_plot_date.erc/3, label='gridMET')
+            plt.scatter(x=df_plot_date.lon.iloc[np.ravel(ind)], y=df_plot_date.lat.iloc[np.ravel(ind)], color='r', marker='x', s=7, label='nearest gridMET')
             plt.scatter(x=xi, y=yi, color='y', edgecolors='y', alpha=0.6, marker='o', s=zi, label='interp NARR')
             plt.scatter(x=df_NARR_date.lon, y=df_NARR_date.lat, color='k', marker='+', s=7, label='NARR')
             plt.xlabel('Longitude, deg'); plt.ylabel('Latitude, deg')
@@ -1561,14 +1561,14 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
     return
 
 
-def plot_NARR_ERC(ERC_date):
+def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     # This function makes the following:
     # 1)    Contour plot containing tripcolour and tricontourf subplots
     #       of ERC data on a single date
     # 2)    Time series of synoptic variable data for a single lon-lat point
     #       over the dataframe's entire time range
 
-    df_NARR_ERC = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/df_NARR_ERC.pkl')
+    df_NARR_ERC = pd.read_pickle(NARR_gridMET_pkl_in_dir + 'df_NARR_ERC.pkl')
     print('df_NARR_ERC:\n', df_NARR_ERC)
 
     # WARNING: These x,y,t values are for all days in df_NARR_ERC.
@@ -1591,10 +1591,10 @@ def plot_NARR_ERC(ERC_date):
     print('df.index:\n', df.index[0:100])
 
     # Convert timepoint to build contour plot from ERC data
-    ERC_date = datetime.strptime(ERC_date, '%Y,%m,%d')
-    print('ERC_date:', ERC_date)
+    plot_date = datetime.strptime(plot_date, '%Y,%m,%d')
+    print('plot_date:', plot_date)
     # Get the ERC data for the day specified
-    df_t0 = df[(df.index == ERC_date)]
+    df_t0 = df[(df.index == plot_date)]
     # Split into constituents
     x_t0 = df_t0['lon'].values.tolist()
     y_t0 = df_t0['lat'].values.tolist()
@@ -1616,20 +1616,19 @@ def plot_NARR_ERC(ERC_date):
     ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
     f.colorbar(tcf)
 
-    date_str = ERC_date.strftime('%b %d, %Y')
+    date_str = plot_date.strftime('%b %d, %Y')
     plt.suptitle('ERC Contour Plots: '+date_str)
     plt.savefig('ERC_contour.png', bbox_inches='tight')
     plt.show()
 
 
-
+    # Creating a dataframe at one longitude point across all time points:
     df_NARR_ERC.reset_index(inplace=True)
-    df_NARR_ERC.set_index('lon', inplace=True)
+    df_NARR_ERC.set_index(['lon','lat'], inplace=True)
     print('df_NARR_ERC with lon index:\n', df_NARR_ERC)
     # Specifying a longitude point, make this an
     # actual longitude value in the future:
-    lon = -124.500
-    df_NARR_ERC_lon_lat_time_series = df_NARR_ERC.loc[lon]
+    df_NARR_ERC_lon_lat_time_series = df_NARR_ERC.loc[plot_lon, plot_lat]
     print('df_NARR_ERC_lon_lat_time_series:\n', df_NARR_ERC_lon_lat_time_series)
     
     plt.close()
@@ -1646,18 +1645,18 @@ def plot_NARR_ERC(ERC_date):
     df_NARR_ERC_lon_lat_time_series.plot(x='time', y='CAPE', ax=ax[2], color='orange')
     df_NARR_ERC_lon_lat_time_series.plot(x='time', y='ERC', ax=ax[3], color='r')
     ax[0].set_xlabel('Date')
-    ax[0].set_ylabel('H500 Grad at '+str(lon)+'deg, m/deg')
+    ax[0].set_ylabel('H500 Grad at '+str(plot_lon)+', '+str(plot_lat)+'deg, m/deg')
     ax[0].set_title('Time Series: H500 Gradients')
     ax[1].set_xlabel('Date')
-    ax[1].set_ylabel('PMSL Grad at '+str(lon)+'deg, hPa/deg')
+    ax[1].set_ylabel('PMSL Grad at '+str(plot_lon)+', '+str(plot_lat)+'deg, hPa/deg')
     ax[1].set_title('Time Series: PMSL Gradients')
     ax[2].set_xlabel('Date')
-    ax[2].set_ylabel('CAPE at '+str(lon)+'deg, kJ/kg')
+    ax[2].set_ylabel('CAPE at '+str(plot_lon)+', '+str(plot_lat)+'deg, kJ/kg')
     ax[2].set_title('Time Series: CAPE')
     ax[3].set_xlabel('Date')
-    ax[3].set_ylabel('ERC at '+str(lon)+'deg, AR')
+    ax[3].set_ylabel('ERC at '+str(plot_lon)+', '+str(plot_lat)+'deg, AR')
     ax[3].set_title('Time Series: ERC')
-    plt.savefig('NARR_ERC_Lon_Lat_Time_Series.png', bbox_inches='tight')
+    plt.savefig('NARR_ERC_lon_lat_time_series.png', bbox_inches='tight')
     plt.show()
 
 
@@ -1718,19 +1717,24 @@ def synvarPickleToCSV(pickle_in_filename, csv_out_filename, cols_list):
 
 # ----------------------------------------
 ''' Merge NARR and gridMET '''
-start_date               = '1979,1,1'
-end_date                 = '1979,1,12'
-gridMET_pkl_in_dir       = '/home/dp/Documents/FWP/gridMET/pickle/'
-NARR_pkl_in_dir          = '/home/dp/Documents/FWP/NARR/pickle/'
-NARR_gridMET_pkl_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
-NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/'
+# start_date               = '1979,1,1'
+# end_date                 = '1979,1,12'
+# gridMET_pkl_in_dir       = '/home/dp/Documents/FWP/gridMET/pickle/'
+# NARR_pkl_in_dir          = '/home/dp/Documents/FWP/NARR/pickle/'
+# NARR_gridMET_pkl_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
+# NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/'
 
-merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
+# merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
 # ----------------------------------------
 
 # ----------------------------------------
 ''' Plot NARR and gridMET data '''
-# plot_NARR_ERC('1979,1,12')
+plot_date               = '1979,1,12'
+plot_lon                = 245.745
+plot_lat                = 42.3137
+NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
+
+plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir)
 # ----------------------------------------
 
 # ----------------------------------------
