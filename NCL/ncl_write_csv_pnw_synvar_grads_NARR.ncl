@@ -21,18 +21,21 @@ begin
     ;-------  Laptop NARR data directories  -------
 
     ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
+    ; cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
     ; cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/nc/"     ; netCDF directory
-    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
+    ; cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/nc/"   ; Another 3D directory with different dates
 
     ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/"       ; flx is PMSL: directory Jan 1-3 files
-    ; cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/nc/"    ; netCDF directory
     ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/"
+    ; cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/nc/"      ; netCDF directory
+    ; cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/nc/"   ; Another 3D directory with different dates
 
     ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/"       ; pbl is CAPE: directory Jan 1-3 files
-    cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/nc/"       ; netCDF directory
     ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/"   ; pbl is CAPE: directory June 1-3 files
-    
-    ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of vars: directory Jan 1-3 files
+    ; cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/nc/"       ; netCDF directory
+    cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/nc/"   ; Another 3D directory with different dates
+
+    ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of variables: directory covers Jan 1-3
 
 
     ;-------  Seagate NARR data directories  -------
@@ -43,16 +46,24 @@ begin
 
     grib_per_csv = 100   ; Set the number of grib files to go into one csv file. Max is 131 due to row limitations.
 
-    ; SYNVAR             = "HGT_221_ISBL"
-    ; SYNVAR             = "H500"
-    ; SYNVAR             = "PRMSL_221_MSL"
-    ; SYNVAR             = "PMSL"
-    ; SYNVAR             = "CAPE_221_SPDY"
-    SYNVAR             = "CAPE"
-    
+    ;-------  Grib or netCDF?  -------
+    Grib               = False ; If processing Grib files
+    netCDF             = True  ; If processing netCDF files
+
+    ;-------  Grib SYNVAR  -------
+    ; SYNVAR             = "HGT_221_ISBL" ; for grib
+    ; SYNVAR             = "PRMSL_221_MSL" ; for grib
+    ; SYNVAR             = "CAPE_221_SPDY" ; for grib
+
+    ;-------  netCDF SYNVAR  -------
+    ; SYNVAR             = "H500" ; for netCDF
+    ; SYNVAR             = "PMSL" ; for netCDF
+    SYNVAR             = "CAPE" ; for netCDF
+
     ; SYNABBR            = "H500"
     ; SYNABBR            = "PMSL"
     SYNABBR            = "CAPE"
+
  
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
     ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
@@ -95,14 +106,12 @@ begin
     ;---Remove current csv file if it exists
     system("rm -rf " + csv_filename)
 
-    ;---Manually set header lines
-    if(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then
-        ; If netCDF derived H500 or PMSL (SYNABBR is "H500" or "PMSL")
+    ;---Manually set header lines, SYNABBR is "H500" or "PMSL" or "CAPE")
+    if(netCDF) then
         SYNABBR_GRAD_X = SYNABBR + " Grad X"
         SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
         field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
-    else
-        ; If grib derived variable such as HGT_221_ISBL, PRMSL_221_MSL, or CAPE_221_SPDY
+    else ; If 
         field_names = (/ "time", "lon", "lat", SYNABBR /)
     end if
     
@@ -146,16 +155,15 @@ begin
             system("rm -rf " + csv_filename)
             
             ;---Manually set header lines
-            if(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then
-                ; If netCDF derived H500 or PMSL (SYNABBR is "H500" or "PMSL")
+            ;---If netCDF derived H500 or PMSL (SYNABBR is "H500" or "PMSL")
+            if(netCDF) then
                 SYNABBR_GRAD_X = SYNABBR + " Grad X"
                 SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
                 field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
             else
-                ; If grib derived variable such as HGT_221_ISBL, PRMSL_221_MSL, or CAPE_221_SPDY
                 field_names = (/ "time", "lon", "lat", SYNABBR /)
             end if
-    
+
             ;---Merge column names into comma separated string
             header = [/str_join(field_names,",")/]
     
@@ -175,8 +183,10 @@ begin
             v    = f[i]->HGT_221_ISBL ; selects ith file's Geopotential height
         elseif(SYNVAR .eq. "PRMSL_221_MSL") then
             v    = f[i]->PRMSL_221_MSL
-        elseif(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then
-            ; If SYNVAR is specified as H500 or PMSL,
+        elseif(SYNVAR .eq. "CAPE_221_SPDY") then
+            v    = f[i]->CAPE_221_SPDY
+        else
+            ; If SYNVAR is specified as H500, PMSL or CAPE,
             ; then it came from a netCDF with rectilinear
             ; NARR data, and it contains variables H500,
             ; H500GradX, and H500GradY. Or the PMSL equivalents.
@@ -184,12 +194,8 @@ begin
             SYNVAR_GRAD_X   = SYNVAR + "GradX"
             SYNVAR_GRAD_Y   = SYNVAR + "GradY"
             dvdx            = f[i]->$SYNVAR_GRAD_X$
-            dvdy            = f[i]->$SYNVAR_GRAD_X$
-        elseif(SYNVAR .eq. "CAPE_221_SPDY") then
-            v    = f[i]->CAPE_221_SPDY
-        elseif(SYNVAR .eq. "CAPE") then
-            v    = f[i]->$SYNVAR$
-            ;print("v:"+v(0,0,0:100))
+            dvdy            = f[i]->$SYNVAR_GRAD_Y$
+            ; print("v:"+v(0,0,0:100))
         end if
 
         ;---Selecting SYNVAR over all of North America at 500 mbar level
@@ -200,12 +206,12 @@ begin
         ;---Decides level based on synoptic variable abbreviation
         if(SYNVAR .eq. "HGT_221_ISBL") then
             SYNNAME = v(12,:,:)         ; H500 is at level 12 is assigned to 
-        elseif(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then
+        elseif(SYNVAR .eq. "PRMSL_221_MSL" .or. SYNVAR .eq. "CAPE_221_SPDY") then
+            SYNNAME = v(:,:)            ; CAPE and PMSL have no levels
+        else ; If SYNVAR = H500, PMSL or CAPE
             SYNNAME = v(:,:)
             SYNNAME_GRAD_X = dvdx(:,:)
             SYNNAME_GRAD_Y = dvdy(:,:)
-        else
-            SYNNAME = v(:,:)            ; CAPE and PMSL have no levels
         end if
 
         x    = f[i]->lon
@@ -233,7 +239,7 @@ begin
 
         SYNNAME_OR_WA = SYNNAME
         ;---Assumes gradients are present. If not, this will error.
-        if(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then
+        if(netCDF) then
             SYNNAME_GRAD_X_OR_WA = SYNNAME_GRAD_X
             SYNNAME_GRAD_Y_OR_WA = SYNNAME_GRAD_Y
         end if
@@ -243,7 +249,7 @@ begin
         t_OR_WA = t_conf
         
         SYNNAME_OR_WA_1D   = ndtooned(SYNNAME_OR_WA)
-        if(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then
+        if(netCDF) then
             SYNNAME_GRAD_X_OR_WA_1D   = ndtooned(SYNNAME_GRAD_X_OR_WA)
             SYNNAME_GRAD_Y_OR_WA_1D   = ndtooned(SYNNAME_GRAD_Y_OR_WA)
         end if
@@ -255,7 +261,7 @@ begin
         ;print(t_OR_WA_1d)
 
         ;---Write data to file        
-        if(SYNVAR .eq. "H500" .or. SYNVAR .eq. "PMSL") then ; for H500 and PMSL
+        if(netCDF) then ; for H500, PMSL or CAPE
             alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D/]
         else ; for CAPE
             alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D/]

@@ -24,14 +24,14 @@ begin
     
     ;-------  Laptop NARR data directories  -------
 
-    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
-    ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
+    ; cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
+    cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
 
-    cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/"        ; flx is PMSL: directory Jan 1-3 files
-    ;cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/"
+    ; cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/"        ; flx is PMSL: directory Jan 1-3 files
+    ; cdir = "/home/dp/Documents/FWP/NARR/flx_grib1_exp/temp/"
 
     ; cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/"       ; pbl is CAPE: directory Jan 1-3 files
-    ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/"   ; pbl is CAPE: directory June 1-3 files
+    ; cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/"   ; pbl is CAPE: directory June 1-3 files
     
     ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of vars: directory Jan 1-3 files
 
@@ -42,23 +42,39 @@ begin
     ; cdir = "/mnt/seagate/NARR/flx/"                         ; Seagate  - NARR data - flx - PMSL
     ; cdir = "/mnt/seagate/NARR/pbl/"                         ; Seagate  - NARR data - pbl - CAPE
 
-    ; SYNVAR             = "HGT_221_ISBL"
-    SYNVAR             = "PRMSL_221_MSL"
+    SYNVAR             = "HGT_221_ISBL"
+    ; SYNVAR             = "PRMSL_221_MSL"
     ; SYNVAR             = "CAPE_221_SPDY"
 
     lvl         = 500                                  ; arbitrary pressure level for H500
 
-    ; SYNABBR            = "H500"
-    SYNABBR            = "PMSL"
+    SYNABBR            = "H500"
+    ; SYNABBR            = "PMSL"
     ; SYNABBR            = "CAPE"
  
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
     ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ;---Setting Gradient strings. Calculating gradients for all variables.
+    SYNABBR_GRAD_X = SYNABBR+"GradX"
+    SYNABBR_GRAD_Y = SYNABBR+"GradY"
     
-    if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-        SYNABBR_GRAD_X = SYNABBR+"GradX"
-        SYNABBR_GRAD_Y = SYNABBR+"GradY"
+    ;---Setting Gradient attribute strings to be written to dxdlon and dxdlat
+    if(SYNABBR .eq. "H500") then
+        SYNVAR_GRAD_X_UNITS = "gpm/deg"
+        SYNVAR_GRAD_Y_UNITS = "gpm/deg"
+        SYNVAR_GRAD_X_LONG_NAME = "Geopotential height lon gradient"
+        SYNVAR_GRAD_Y_LONG_NAME = "Geopotential height lat gradient"
+    elseif(SYNABBR .eq. "PMSL") then
+        SYNVAR_GRAD_X_UNITS = "Pa/deg"
+        SYNVAR_GRAD_Y_UNITS = "Pa/deg"
+        SYNVAR_GRAD_X_LONG_NAME = "Pressure lon gradient"
+        SYNVAR_GRAD_Y_LONG_NAME = "Pressure lat gradient" 
+    elseif(SYNABBR .eq. "CAPE") then
+        SYNVAR_GRAD_X_UNITS = "J/kg-deg"
+        SYNVAR_GRAD_Y_UNITS = "J/kg-deg"
+        SYNVAR_GRAD_X_LONG_NAME = "Convective energy lon gradient"
+        SYNVAR_GRAD_Y_LONG_NAME = "Convective energy lat gradient" 
     end if
 
     cmd = "cd "+cdir+" ; ls *.grib1"
@@ -191,35 +207,36 @@ begin
         ;printVarSummary(lon)
 
     ;---Calculate gradients of x_reclin
-        if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-            ;---Only calculate gradients for H500 and PMSL
-            dxdlon = center_finite_diff_n(x_reclin, lon, False, 0, 1)
-            dxdlat = center_finite_diff_n(x_reclin, lat, False, 0, 0)
-            ;print(dxdlon)
-            ;print(dxdlat)
 
-        ;---Name and assign dimensions to the gradient variables:
-            dxdlon!0    = "lat"      ; name the dimension
-            dxdlon&lat  = lat      ; assign lat to lat dimension
-            dxdlon!1    = "lon"      ; name the dimension
-            dxdlon&lon  = lon      ; assign lat to lat dimension
-            dxdlon@lv_ISBL0 = lvl
-            dxdlon@units = "gpm/deg"
-            dxdlon@long_name = "Geopotential height lon gradient"
-            dxdlon@time = x@initial_time
+    ;---Only calculate gradients for H500 and PMSL
+        dxdlon = center_finite_diff_n(x_reclin, lon, False, 0, 1)
+        dxdlat = center_finite_diff_n(x_reclin, lat, False, 0, 0)
+        ;print(dxdlon)
+        ;print(dxdlat)
 
-            dxdlat!0    = "lat"      ; name the dimension
-            dxdlat&lat  = lat      ; assign lat to lat dimension
-            dxdlat!1    = "lon"      ; name the dimension
-            dxdlat&lon  = lon      ; assign lat to lat dimension
-            dxdlat@lv_ISBL0 = lvl
-            dxdlat@units = "gpm/deg"
-            dxdlat@long_name = "Geopotential height lat gradient"
-            dxdlat@time = x@initial_time
+    ;---Name and assign dimensions to the gradient variables:
+        dxdlon!0    = "lat"      ; name the dimension
+        dxdlon&lat  = lat      ; assign lat to lat dimension
+        dxdlon!1    = "lon"      ; name the dimension
+        dxdlon&lon  = lon      ; assign lat to lat dimension
+        dxdlon@lv_ISBL0 = lvl
+        dxdlon@units = SYNVAR_GRAD_X_UNITS ; "gpm/deg", "Pa/deg", "J/kg-deg"
+        dxdlon@long_name = SYNVAR_GRAD_X_LONG_NAME ; e.g. "Geopotential height lon gradient"
+        dxdlon@time = x@initial_time
 
-            printVarSummary(dxdlat)
-            printVarSummary(dxdlon)
-        end if
+        dxdlat!0    = "lat"      ; name the dimension
+        dxdlat&lat  = lat      ; assign lat to lat dimension
+        dxdlat!1    = "lon"      ; name the dimension
+        dxdlat&lon  = lon      ; assign lat to lat dimension
+        dxdlat@lv_ISBL0 = lvl
+        dxdlat@units = SYNVAR_GRAD_Y_UNITS
+        dxdlat@long_name = SYNVAR_GRAD_Y_LONG_NAME
+        dxdlat@time = x@initial_time
+
+        printVarSummary(dxdlat)
+        printVarSummary(dxdlon)
+
+
 
         ;------------------------------------- EXPORT netCDF -------------------------------------
 
@@ -256,10 +273,8 @@ begin
         filevardef(ncdf, "lat"      ,typeof(lat)     , getvardims(lat))
         filevardef(ncdf, "lon"      ,typeof(lon)     , getvardims(lon))
         filevardef(ncdf, SYNABBR     ,typeof(x_reclin), getvardims(x_reclin))
-        if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-            filevardef(ncdf, SYNABBR_GRAD_X   ,typeof(dxdlon)  , getvardims(dxdlon))
-            filevardef(ncdf, SYNABBR_GRAD_Y   ,typeof(dxdlat)  , getvardims(dxdlat))
-        end if
+        filevardef(ncdf, SYNABBR_GRAD_X   ,typeof(dxdlon)  , getvardims(dxdlon))
+        filevardef(ncdf, SYNABBR_GRAD_Y   ,typeof(dxdlat)  , getvardims(dxdlat))
 
         ;---------------------------------------------------
         ; Copy attributes associated with each variable to the file
@@ -269,10 +284,8 @@ begin
         filevarattdef(ncdf, "lat"   ,lat  )                   ; copy lat attributes
         filevarattdef(ncdf, "lon"   ,lon  )                   ; copy lon attributes
         filevarattdef(ncdf, SYNABBR  ,x_reclin )
-        if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-            filevarattdef(ncdf, SYNABBR_GRAD_X, dxdlon )
-            filevarattdef(ncdf, SYNABBR_GRAD_Y, dxdlat )
-        end if
+        filevarattdef(ncdf, SYNABBR_GRAD_X, dxdlon )
+        filevarattdef(ncdf, SYNABBR_GRAD_Y, dxdlat )
 
         ;---------------------------------------------------
         ; Write values to the file
@@ -281,10 +294,8 @@ begin
         ncdf->lat         = (/ lat /)
         ncdf->lon         = (/ lon /)
         ncdf->$SYNABBR$   = (/ x_reclin /)
-        if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-            ncdf->$SYNABBR_GRAD_X$ = (/ dxdlon /)
-            ncdf->$SYNABBR_GRAD_Y$ = (/ dxdlat /)
-        end if
+        ncdf->$SYNABBR_GRAD_X$ = (/ dxdlon /)
+        ncdf->$SYNABBR_GRAD_Y$ = (/ dxdlat /)
 
         print("progress: "+i+"/"+endfile)
 
@@ -334,16 +345,14 @@ begin
     x_reclin = a->$SYNABBR$
     printVarSummary(x_reclin)
 
-    if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-        ;---Deletes from the last H500 or PMSL file converted to netCDF above:
-        delete(dxdlon)
-        delete(dxdlat)
-        ;---Reassigns from netCDF:
-        dxdlon = a->$SYNABBR_GRAD_X$
-        dxdlat = a->$SYNABBR_GRAD_Y$
-        printVarSummary(dxdlon)
-        printVarSummary(dxdlat)
-    end if
+    ;---Deletes from the last H500 or PMSL file converted to netCDF above:
+    delete(dxdlon)
+    delete(dxdlat)
+    ;---Reassigns from netCDF:
+    dxdlon = a->$SYNABBR_GRAD_X$
+    dxdlat = a->$SYNABBR_GRAD_Y$
+    printVarSummary(dxdlon)
+    printVarSummary(dxdlat)
 
     ;---Save resulting plot as H500_OR_WA.png, PMSL_OR_WA.png:
     wks = gsn_open_wks("png", SYNABBR+"_OR_WA")
@@ -385,71 +394,69 @@ begin
     frame(wks)
 
 
-    if(SYNABBR .eq. "H500" .or. SYNABBR .eq. "PMSL") then
-        ;---H500 or PMSL Grad X:
-        wks = gsn_open_wks("png", SYNABBR+"_Grad_X_OR_WA")
+    ;---H500, PMSL or CAPE Grad X:
+    wks = gsn_open_wks("png", SYNABBR+"_Grad_X_OR_WA")
 
-        dxdlon_sub  := dxdlon({lat_min:lat_max},{lon_min:lon_max})
-        printVarSummary(dxdlon_sub)
-        ;---Setting some resources
-        res                 = True
-        res@gsnMaximize     = True     ; maximize plot in frame
-        res@cnFillOn        = True     ; turn on contour fill
-        res@cnLinesOn       = False    ; turn off contour lines
-        res@cnLineLabelsOn  = False    ; turn off contour line labels
-        res@tiMainString    = "Plotting lat/lon subset of zonal gradient"
-        res@pmTitleZone     = 4        ; Moves title down
-        res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
-        res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
+    dxdlon_sub := dxdlon({lat_min:lat_max},{lon_min:lon_max})
+    printVarSummary(dxdlon_sub)
+    ;---Setting some resources
+    res                 = True
+    res@gsnMaximize     = True     ; maximize plot in frame
+    res@cnFillOn        = True     ; turn on contour fill
+    res@cnLinesOn       = False    ; turn off contour lines
+    res@cnLineLabelsOn  = False    ; turn off contour line labels
+    res@tiMainString    = "Plotting lat/lon subset of zonal gradient"
+    res@pmTitleZone     = 4        ; Moves title down
+    res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
+    res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
 
-        ;---Recalculate values for new min/max lon/lon and create new plot
-        res@gsnDraw       = False 
-        res@gsnFrame      = False
-        res@mpMinLatF     = min(dxdlon_sub&lat)-2
-        res@mpMaxLatF     = max(dxdlon_sub&lat)+2
-        res@mpMinLonF     = min(dxdlon_sub&lon)-2
-        res@mpMaxLonF     = max(dxdlon_sub&lon)+2
-        res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
-        res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
+    ;---Recalculate values for new min/max lon/lon and create new plot
+    res@gsnDraw       = False 
+    res@gsnFrame      = False
+    res@mpMinLatF     = min(dxdlon_sub&lat)-2
+    res@mpMaxLatF     = max(dxdlon_sub&lat)+2
+    res@mpMinLonF     = min(dxdlon_sub&lon)-2
+    res@mpMaxLonF     = max(dxdlon_sub&lon)+2
+    res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
+    res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
 
-        ;---Plot:
-        plt = gsn_csm_contour_map(wks, dxdlon_sub, res)
-        draw(plt)
-        frame(wks)
-
+    ;---Plot:
+    plt = gsn_csm_contour_map(wks, dxdlon_sub, res)
+    draw(plt)
+    frame(wks)
 
 
-        ;---H500 or PMSL Grad Y:
-        wks = gsn_open_wks("png", SYNABBR+"_Grad_Y_OR_WA")
 
-        dxdlat_sub  := dxdlat({lat_min:lat_max},{lon_min:lon_max})
-        printVarSummary(dxdlat_sub)
-        ;---Setting some resources
-        res                 = True
-        res@gsnMaximize     = True     ; maximize plot in frame
-        res@cnFillOn        = True     ; turn on contour fill
-        res@cnLinesOn       = False    ; turn off contour lines
-        res@cnLineLabelsOn  = False    ; turn off contour line labels
-        res@tiMainString    = "Plotting lat/lon subset of meridional gradient"
-        res@pmTitleZone     = 4        ; Moves title down
-        res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
-        res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
+    ;---H500 or PMSL Grad Y:
+    wks = gsn_open_wks("png", SYNABBR+"_Grad_Y_OR_WA")
 
-        ;---Recalculate values for new min/max lon/lon and create new plot
-        res@gsnDraw       = False 
-        res@gsnFrame      = False
-        res@mpMinLatF     = min(dxdlat_sub&lat)-2
-        res@mpMaxLatF     = max(dxdlat_sub&lat)+2
-        res@mpMinLonF     = min(dxdlat_sub&lon)-2
-        res@mpMaxLonF     = max(dxdlat_sub&lon)+2
-        res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
-        res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
+    dxdlat_sub  := dxdlat({lat_min:lat_max},{lon_min:lon_max})
+    printVarSummary(dxdlat_sub)
+    ;---Setting some resources
+    res                 = True
+    res@gsnMaximize     = True     ; maximize plot in frame
+    res@cnFillOn        = True     ; turn on contour fill
+    res@cnLinesOn       = False    ; turn off contour lines
+    res@cnLineLabelsOn  = False    ; turn off contour line labels
+    res@tiMainString    = "Plotting lat/lon subset of meridional gradient"
+    res@pmTitleZone     = 4        ; Moves title down
+    res@gsnAddCyclic    = False    ; The subset lon data doesn't extend 360 degress (not cyclical)
+    res@cnLevelSelectionMode = "AutomaticLevels"     ; set manual contour levels
 
-        ;---Plot:
-        plt = gsn_csm_contour_map(wks, dxdlat_sub, res)
-        draw(plt)
-        frame(wks)
-    end if
+    ;---Recalculate values for new min/max lon/lon and create new plot
+    res@gsnDraw       = False 
+    res@gsnFrame      = False
+    res@mpMinLatF     = min(dxdlat_sub&lat)-2
+    res@mpMaxLatF     = max(dxdlat_sub&lat)+2
+    res@mpMinLonF     = min(dxdlat_sub&lon)-2
+    res@mpMaxLonF     = max(dxdlat_sub&lon)+2
+    res@mpCenterLonF  = (res@mpMinLonF + res@mpMaxLonF) / 2.
+    res@pmTickMarkDisplayMode = "Always"  ; nicer map tickmarks
+
+    ;---Plot:
+    plt = gsn_csm_contour_map(wks, dxdlat_sub, res)
+    draw(plt)
+    frame(wks)
 
 
 
