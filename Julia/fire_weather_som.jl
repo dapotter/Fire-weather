@@ -3,7 +3,7 @@ using RDatasets
 using CSV
 using Dates
 
-function fire_weather_som(hexgrid_x, hexgrid_y, NARR_gridMET_csv_in)
+function fire_weather_som(hexgrid_x, hexgrid_y, iterations, NARR_gridMET_csv_in)
     """Import data from csv:"""
     #all_synvar = CSV.read("//home//dp//Documents//FWP//NARR//df_all_synvar_grid_interp.csv")
     #H500_x_grad = all_synvar[:,:] # Columns lon, lat, H500 Grad X (skip time column)
@@ -15,8 +15,10 @@ function fire_weather_som(hexgrid_x, hexgrid_y, NARR_gridMET_csv_in)
     NARR_ERC = deletecols!(NARR_ERC, :lon)
     print("NARR_ERC[1:100,:] imported from csv:\n", NARR_ERC[1:100,:])
     # df = NARR_ERC[(NARR_ERC[:time].>=Date(1979,7,1))&(NARR_ERC[:time].<=Date(1979,7,31)),:]
-    start_date = Dates.Date("1979-08-01","y-m-d")
-    end_date = Dates.Date("1979-08-31","y-m-d")
+    start_date =    Dates.Date("1979-10-01","y-m-d")
+    end_date =      Dates.Date("1979-10-31","y-m-d")
+    month_name =               "October"
+    month_num =                "10"
     df_start = NARR_ERC[(NARR_ERC[:time].>=start_date), :]
     print("df_start[1:100,:]:\n", df_start[1:100,:])
     df_end = NARR_ERC[NARR_ERC[:time].>=end_date, :]
@@ -40,9 +42,9 @@ function fire_weather_som(hexgrid_x, hexgrid_y, NARR_gridMET_csv_in)
     # Initialize (hexgrid_x, hexgrid_y specified in function parameters)
     som = initSOM(train, hexgrid_x, hexgrid_y)
     # Initial training:
-    som = trainSOM(som, train, 10000)
+    som = trainSOM(som, train, iterations)
     # Finalise training with additional round with smaller radius:
-    som = trainSOM(som, train, 10000, r = 3.0)
+    som = trainSOM(som, train, iterations, r = 3.0)
 
     # Make X,Y vector of SOM map locations for best matching units
     # and return their row numbers in the train data
@@ -61,9 +63,11 @@ function fire_weather_som(hexgrid_x, hexgrid_y, NARR_gridMET_csv_in)
     print("som:\n", som)
     freqs = classFrequencies(som, NARR_ERC, :ERC)
     print("freqs:\n", freqs)
+
+    plot_title = "SOM Class Frequencies - "*month_name*", 1979"
     color_dict = Dict("low"=>"green","moderate"=>"yellowgreen","high"=>"yellow","very high"=>"orange","extreme"=>"red")
-    f = "//home//dp//Documents//FWP//Julia//NARR_ERC_SOM_classes_"*string(hexgrid_x)*"x"*string(hexgrid_y)*".png"
-    plotClasses(som, freqs, device=:png, colors=color_dict, fileName=f)
+    file_name = "//home//dp//Documents//FWP//Julia//"*month_num*"_NARR_ERC_SOM_classes_"*string(hexgrid_x)*"x"*string(hexgrid_y)*"_"*string(iterations)*"iters_"*month_name*".png"
+    plotClasses(som, freqs, title=plot_title, device=:png, colors=color_dict, fileName=file_name)
 
 end
 
@@ -71,5 +75,6 @@ end
 # Run Fire Weather SOM on categorical ERC data:
 hexgrid_x = 30
 hexgrid_y = 30
+iterations = 10000
 NARR_gridMET_csv_in = "//home//dp//Documents//FWP//NARR_gridMET//csv//df_NARR_ERC_categorical.csv"
-fire_weather_som(hexgrid_x,hexgrid_y,NARR_gridMET_csv_in) # hexgrid_x, hexgrid_y
+fire_weather_som(hexgrid_x, hexgrid_y, iterations, NARR_gridMET_csv_in) # hexgrid_x, hexgrid_y
