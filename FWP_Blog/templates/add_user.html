@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+		<meta charset='utf-8' />
+</head>
+<body>
+
+	<form method='post' action='/post_user'> {# Tells it to go to the post_user method in app.py #}
+		<label>Username:</label>
+		<input id='username' name='username' type='text' />
+		<label>Email:</label>
+		<input id='email' name='email' type='text' />
+		<input type='submit' />
+	</form>
+
+	{# Loops over every username in the User database that was returned by myUser = User.query.all() in app.py #}
+	{% for user in myUser %}
+		<li>{{ user.id }} - {{ user.username }} - {{ user.email }}</li>
+	{% endfor %}
+
+	{# Querying one item from db: #}
+	{{ oneItem }}
+	{{ oneItem.username }}
+	
+	{# If many duplicate items, all will print: #}
+	{% for item in manyItems %}
+		"item:"
+		{{ item.username }}
+	{% endfor %}
+
+</body>
+</html>

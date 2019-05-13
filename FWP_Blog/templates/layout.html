@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+
+{#
+<!--
+This is a parent template that lets us update every page
+on the site. home.html, about.html, etc all send their
+code to this file's content block to be formatted properly.
+-->
+#}
+
+<html>
+<head>
+
+	<!-- This is bootstrap css -->
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+	<!-- End of bootstrap css -->
+
+	<!-- Insert main.css styling here below the bootstrap css -->
+	<!-- Notice that url_for is used in the href to locate main.css automatically inside /FWP_Blog/static/ -->
+	<!-- To change from one css file to the next, change filename  -->
+	<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='main.css') }}">
+
+	{% if title %} <!--	If title is provided in render_template: -->
+		<title>Flask Blog - {{ title }}</title>
+	{% else %} <!--	If no title is provided: -->
+		<title>FWP Blog</title>
+	{% endif %}</head>
+
+<body>
+
+	<!-- Navigation code. Copied from snippets/navigation.html -->
+	<header class="site-header">
+	  <nav class="navbar navbar-expand-md navbar-dark bg-steel fixed-top">
+	    <div class="container">
+	      <a class="navbar-brand mr-4" href="/">Dan Potter</a>
+	      <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarToggle" aria-controls="navbarToggle" aria-expanded="false" aria-label="Toggle navigation">
+	        <span class="navbar-toggler-icon"></span>
+	      </button>
+	      <div class="collapse navbar-collapse" id="navbarToggle">
+	        <div class="navbar-nav mr-auto">
+	          <a class="nav-item nav-link" href="{{ url_for('home') }}">Home</a>
+	          <a class="nav-item nav-link" href="{{ url_for('about') }}">About</a>
+	   	      <a class="nav-item nav-link" href="{{ url_for('campaign') }}">Campaign</a>
+	        </div>
+	        <!-- Navbar Right Side -->
+	        <div class="navbar-nav">
+	          <a class="nav-item nav-link" href="/login">Login</a>
+	          <a class="nav-item nav-link" href="/register">Register</a>
+	        </div>
+	      </div>
+	    </div>
+	  </nav>
+	</header>
+
+	<!-- Main section of website. Copied from snippets/main.html -->
+	<main role="main" class="container">
+	  <div class="row">
+	    <div class="col-md-8">
+	      {% block content %}{% endblock %}
+	    </div>
+	    <div class="col-md-4">
+	      <div class="content-section">
+	        <h3>Our Sidebar</h3>
+	        <p class='text-muted'>You can put any information here you'd like.
+	          <ul class="list-group">
+	            <li class="list-group-item list-group-item-light">Latest Posts</li>
+	            <li class="list-group-item list-group-item-light">Announcements</li>
+	            <li class="list-group-item list-group-item-light">Calendars</li>
+	            <li class="list-group-item list-group-item-light">etc</li>
+	          </ul>
+	        </p>
+	      </div>
+	    </div>
+	  </div>
+	</main>
+
+{# 
+	<!-- -----------  The below div section is replaced by the Main section above ----------- -->
+	<!-- The container class is a bootstrap specific class that makes the text look nice -->
+<!--	<div class="container">		-->
+		<!-- block is a keyword, insert About and Home page's unique content into content  -->
+<!--		{% block content %}{% endblock content %} 	-->
+<!--	</div> 		-->
+#}
+
+	<!-- This is bootstrap javascript -->
+	<!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+	<!-- End of bootstrap javascript -->
+
+</body>
+
+</html>

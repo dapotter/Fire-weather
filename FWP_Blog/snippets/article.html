@@ -1,0 +1,15 @@
+<!-- Notice the post.author, post.date_posted, etc -->
+<!-- This file is formatting each post to make each is visually distinct -->
+<!-- Recall that our home template (home.html) loop through all posts, -->
+<!-- Thus this code will be inserted inside of that loop -->
+
+<article class="media content-section">
+  <div class="media-body">
+    <div class="article-metadata">
+      <a class="mr-2" href="#">{{ post.author }}</a>
+      <small class="text-muted">{{ post.date_posted }}</small>
+    </div>
+    <h2><a class="article-title" href="#">{{ post.title }}</a></h2>
+    <p class="article-content">{{ post.content }}</p>
+  </div>
+</article>

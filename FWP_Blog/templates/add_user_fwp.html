@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+		<meta charset='utf-8' />
+</head>
+<body>
+
+	<form method='post' action='/pull_data'> {# Tells it to go to the pull_data method in app_fwp.py #}
+		<label>Latitude:</label>
+		<input id='lat' name='lat' type='number' step='0.0001' />
+		<label>Longitude:</label>
+		<input id='lon' name='lon' type='number' step='0.0001' />
+		<input type='submit' />
+	</form>
+
+	{# Loops over every lat in the narr_erc table that was 
+	   returned by narr_erc_lat = narr_erc.query.filter_by(lat=39).first() in app_fwp.py #}
+	
+	<h1>narr_erc_all query: lat, lon, date, h500, pmsl, erc:</h1>
+	{% for row in narr_erc_all %}
+		<li>{{ row.lat }}, {{ row.lon }}, {{ row.date }}, {{ row.h500 }}, {{ row.pmsl }}, {{ row.erc }}</li>
+	{% endfor %}
+
+
+	<h1>Lat query: lat, lon, date, h500, pmsl, erc:</h1>
+	<li>
+		{{ narr_erc_lat.lat }}, {{ narr_erc_lat.lon }},
+		{{ narr_erc_lat.date }}, {{ narr_erc_lat.h500 }}
+		{{ narr_erc_lat.h500_grad_x }}, {{ narr_erc_lat.h500_grad_y }}
+		{{ narr_erc_lat.pmsl }}, {{ narr_erc_lat.h500 }}
+		{{ narr_erc_lat.date }}, {{ narr_erc_lat.h500 }}
+	</li>
+
+	{#
+	<h1>Lat-Lon query: lat, lon, date, h500, pmsl, erc:</h1>
+	<li>
+		{{ narr_erc_lat_lon.lat }}, {{ narr_erc_lat_lon.lon }}, {{ narr_erc_lat_lon.date }}, {{ narr_erc_lat_lon.h500 }}, {{ narr_erc_lat_lon.h500_grad_x }}, {{ narr_erc_lat_lon.h500_grad_y }}, {{ narr_erc_lat_lon.h500 }}
+	</li>
+	#}
+
+	{# If many duplicate items, all will print: #}
+	<h1>Date query: id, date, h500, erc</h1>
+
+	{% for row in narr_erc_date %}
+		<li>{{ row.id }} ,{{ row.date }}, {{ row.h500 }}</li>
+	{% endfor %}
+
+</body>
+</html>
