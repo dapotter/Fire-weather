@@ -1,0 +1,5 @@
+attrs:
+    Figure:
+        toolbar_location: above
+        height: 600
+        width: 580

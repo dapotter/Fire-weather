@@ -9,11 +9,11 @@ import numpy as np
 
 from bokeh.layouts import gridplot
 from bokeh.plotting import figure, show, output_file, ColumnDataSource
-from bokeh.io import show, output_notebook
+from bokeh.io import show, output_notebook, curdoc
 from bokeh.embed import components
 # Color palette stuff:
 from bokeh.transform import factor_cmap
-from bokeh.palettes import Blues8
+from bokeh.palettes import Blues8, cividis
 # Basemap stuff:
 from bokeh.sampledata.us_states import data as states
 
@@ -22,6 +22,10 @@ from bokeh.models.glyphs import VBar
 from bokeh.embed import components
 from bokeh.models.sources import ColumnDataSource
 from bokeh.models.ranges import DataRange1d
+from bokeh.models import LinearColorMapper, BasicTicker, ColorBar
+from bokeh.models.widgets import Select, Slider
+from bokeh.layouts import row, column, widgetbox
+
 
 app = Flask(__name__)
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:test123@localhost/fire_weather_db' #'sqlite:////tmp/test.db'
@@ -38,47 +42,6 @@ def connect_to_db():
 	except:
 		print('Can not connect to database')
 
-# db = SQLAlchemy(app)
-
-# ------------------------------------------------------------------------------------------------------------------------------------
-# class narr_erc(db.Model):
-# 	lat 		= db.Column(db.Float())
-# 	lon 		= db.Column(db.Float())
-# 	date 		= db.Column(db.DateTime())
-# 	h500 		= db.Column(db.Float())
-# 	h500_grad_x = db.Column(db.Float())
-# 	h500_grad_y = db.Column(db.Float())
-# 	pmsl 		= db.Column(db.Float())
-# 	pmsl_grad_x = db.Column(db.Float())
-# 	pmsl_grad_y = db.Column(db.Float())
-# 	cape 		= db.Column(db.Float())
-# 	erc 		= db.Column(db.Integer())
-# 	id   		= db.Column(db.Integer(), primary_key=True)
-
-# 	# narr_erc class will be initialized with latitude
-# 	# this means that latitude must be requested 
-# 	def __init__(self, lat, lon):#, lon, date, h500, h500_grad_x, h500_grad_y, pmsl, pmsl_grad_x, pmsl_grad_y, cape, erc):
-# 		# self.username = username
-# 		# self.email = email
-# 		self.lat = lat
-# 		self.lon = lon
-# 		# self.date = date
-# 		# self.h500 = h500
-# 		# self.h500_grad_x = h500_grad_x
-# 		# self.h500_grad_y = h500_grad_y
-# 		# self.pmsl = pmsl
-# 		# self.pmsl_grad_x = pmsl_grad_x
-# 		# self.pmsl_grad_y = pmsl_grad_y
-# 		# self.cape = cape
-# 		# self.erc = erc
-
-# 	# repr for User class
-# 	# repr for lat lon
-# 	def __repr__(self): # dunder method or magic method. How the object is printed when we print it out
-# 		# return '<User %r>' % self.username
-# 		return f"narr_erc('{self.lat}','{self.lon}'), '{self.h500}', '{self.pmsl}', '{self.cape}', '{self.erc}')"
-
-# ------------------------------------------------------------------------------------------------------------------------------------
 
 @app.route('/')
 def index():
@@ -153,7 +116,7 @@ def index():
 	# SQL QUERY: H500 CONTOUR SINGLE DATE
 	# Reading data into a list object 'results' directly from postgres fire_weather_db:
 	cur = conn.cursor()
-	sql =  "select id, lat, lon, date, h500, erc from narr_erc \
+	sql =  "select id, lat, lon, date, h500, h500_grad_x, pmsl, pmsl_grad_x, pmsl_grad_y, erc from narr_erc \
 			where cast(date as date) = '1979-05-15' \
 			order by id"
 	df = pd.read_sql(sql, conn)
@@ -177,35 +140,59 @@ def index():
 	# p.circle(x, y, size=2, color="black", alpha=0.5)
 	# -------------------------------------------
 	# PLOTTING H500 CONTOUR
-
-	# determine range to print based on min, max lat and long of the data
-	# margin = .2 # buffer to add to the range
-	# lat_min = min(lat) - margin
-	# lat_max = max(lat) + margin
-	# long_min = min(long) - margin
-	# long_max = max(long) + margin
+	var = 'pmsl_grad_x'				# e.g. 'h500', 'h500_grad_x', 'erc'
+	var_title = 'PMSL - X Gradient'	# e.g. 'H500', 'H500 - X Gradient', 'ERC'
 
 	lon = df['lon'].drop_duplicates('first').to_numpy()
 	lat = df['lat'].drop_duplicates('first').to_numpy()
 	lonlon, latlat = np.meshgrid(lon, lat)
 	mesh_shape = np.shape(lonlon)
-	d = df['h500'].to_numpy().reshape(mesh_shape)
+
+	# Change -32767 to 0:
+	if var == 'erc':
+		criteria = df[df['erc'] == -32767].index
+		df['erc'].loc[criteria] = 0
+
+	d = df[var].to_numpy().reshape(mesh_shape)
+	var_list = df[var].values.tolist()
+	var_min = min(var_list)
+	var_max = max(var_list)
 
 	lon_min = np.min(lon); lon_max = np.max(lon); dw = lon_max - lon_min
 	lat_min = np.min(lat); lat_max = np.max(lat); dh = lat_max - lat_min
 
 	p = figure(
 		#toolbar_location="left",
-		plot_width=700,
-	    plot_height=700,
+		title=var_title,
+		plot_width=580,
+	    plot_height=600,
 		tooltips=[("lon", "$lon"), ("lat", "$lat"), ("value", "@image")],
 		x_range=(lon_min, lon_max),
-		y_range=(lat_min, lat_max)
+		y_range=(lat_min, lat_max),
+		x_axis_label='Longitude, deg',
+		y_axis_label='Latitude, deg'
 		)
 
+	if var == 'h500_grad_x' or 'h500_grad_y' or 'pmsl_grad_x' or 'pmsl_grad_y':
+		# Color maps that make 0 values clear
+		color_mapper = LinearColorMapper(palette=cividis(256), low=var_min, high=var_max)
+	else:
+		color_mapper = LinearColorMapper(palette="Inferno256", low=var_min, high=var_max)
+		# Decent color map: "Spectra11", "Viridis256"
+
 	# Giving a vector of image data for image parameter (contour plot)
-	p.image(image=[d], x=lon_min, y=lat_min, dw=dw, dh=dh, palette="Spectral11")
+	p.image(image=[d], x=lon_min, y=lat_min, dw=dw, dh=dh, color_mapper=color_mapper)
 	# p.x_range.range_padding = p.y_range.range_padding = 0
+
+	color_bar = ColorBar(
+		color_mapper=color_mapper,
+		ticker=BasicTicker(),
+		label_standoff=12,
+		border_line_color=None,
+		location=(0,0),
+		)
+
+	p.add_layout(color_bar, 'right')
 
 	# get state boundaries from state map data imported from Bokeh
 	state_lats = [states[code]["lats"] for code in states]
@@ -217,17 +204,33 @@ def index():
 	p.patches(state_lons, state_lats, fill_alpha=0.0,
 	      line_color="black", line_width=2, line_alpha=0.3)
 
+	select = Select(title="Weather Variable:", value="H500", options=["H500", "H500 X Gradient", "H500 Y Gradient", "PMSL", "PMSL X Gradient", "PMSL Y Gradient", "Energy Release Component"])
+	# slider = Slider(start=DateTime(1979,1,2), end=DateTime(1979,12,31), value=DateTime(1979,1,2), step=1, title="Date")
+	slider = Slider(start=1, end=365, step=10, title="Date")
+	
+	# def callback(attr, old, new):
+	# 	points = slider.value
+	# 	data_points.data = {'x': random(points), 'y': random(points)}
+
+	# slider.on_change('value', callback)
+
+	widget_layout = widgetbox(slider, select)
+	layout = row(slider, p)
+
+	curdoc().add_root(widget_layout)
+
+	# To run on bokeh server:
+	# bokeh serve --show fwp_app.py
+
 	# # Limit the view to the min and max of the building data
 	# p.x_range = DataRange1d(lon_min, lon_max)
 	# p.y_range = DataRange1d(lat_min, lat_max)
 	# p.xaxis.visible = False
 	# p.yaxis.visible = False
-	# p.xgrid.grid_line_color = None
-	# p.ygrid.grid_line_color = None
+	p.xgrid.grid_line_color = None
+	p.ygrid.grid_line_color = None
 
 	# show(p)
-
-
 
 	# output_file("image.html", title="image.py example")
 
@@ -235,10 +238,9 @@ def index():
 
 	script, div = components(p)
 
-
 	# The data below is passed to add_user_fwp.html to run when localhost:5000/ is opened.
 	# return render_template('add_user_fwp.html', narr_erc_all=narr_erc_all, narr_erc_lat=narr_erc_lat, narr_erc_date=narr_erc_date, script=script, div=div)
-	return render_template('fwp_bokeh_render.html', script=script, div=div, df=df, state_lats=state_lats, state_lons=state_lons)
+	return render_template('fwp_bokeh_render.html', script=script, div=div, widget_layout=widget_layout)
 	# return render_template('bokeh_practice.html', results=results)
 
 
