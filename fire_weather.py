@@ -23,6 +23,9 @@ from mpl_toolkits.basemap import Basemap
 from scipy.interpolate import griddata
 from scipy import spatial
 from sklearn import neighbors
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+
 
 import math
 import glob
@@ -71,7 +74,9 @@ def fire_weather_db(table):
     #     # print(f'lat {r[0]} lon {r[1]} date {r[2]} h500_grad_x {r[3]} h500_grad_y {r[4]} pmsl_grad_x {r[5]} pmsl_grad_y {r[5]} cape {r[6]} erc {r[7]}')
     #     print(f'id {r[0]} first_name {r[1]} last_name {r[2]} age {r[3]} occupation {r[4]}')
     
+    # ----------------------------------------------------------------------------
     if table == 'narr':
+        print('Creating {}...'.format(str(table)))
         # Drop the table. Need to check if it exists first.
         cur.execute("drop table narr")
         # Create narr table:
@@ -91,10 +96,13 @@ def fire_weather_db(table):
                     ")
         # Copy df_NARR.csv into narr table
         cur.execute("copy narr from '/home/dp/Documents/FWP/NARR/csv/df_NARR.csv' delimiter ',' csv header;")
+        # Add primary key
+        cur.execute("alter table narr add column id serial primary key")
         # Read some of the data. Need to find an alternative to fetchall for printing to screen.
         #cur.execute('select * from narr_erc limit 20') # Executes the cursor but won't return rows
-
+    # ----------------------------------------------------------------------------
     elif table == 'narr_erc':
+        print('Creating {}...'.format(str(table)))
         # Drop the table. Need to check if it exists first.
         cur.execute("drop table narr_erc")
         # Create narr_erc table:
@@ -115,10 +123,11 @@ def fire_weather_db(table):
                     ")
         # Copy df_NARR_ERC.csv into narr_erc table
         cur.execute("copy narr_erc from '/home/dp/Documents/FWP/NARR_gridMET/csv/df_NARR_ERC.csv' delimiter ',' csv header;")
-        # Read some of the data. Need to find an alternative to fetchall for printing to screen.
-        #cur.execute('s
-
+        # Add primary key
+        cur.execute("alter table narr_erc add column id serial primary key")
+    # ----------------------------------------------------------------------------
     elif table == 'narr_erc_categorical':
+        print('Creating {}...'.format(str(table)))
         # Drop the table. Need to check if it exists first.
         cur.execute("drop table narr_erc_categorical")
         # Create narr_erc_categorical table:
@@ -139,13 +148,14 @@ def fire_weather_db(table):
                     ")
         # Copy df_NARR_ERC_categorical.csv into narr_erc_categorical table
         cur.execute("copy narr_erc_categorical from '/home/dp/Documents/FWP/NARR_gridMET/csv/df_NARR_ERC_categorical.csv' delimiter ',' csv header;")
-        # Read some of the data. Need to find an alternative to fetchall for printing to screen.
-        #cur.execute('s
-
+        # Add primary key
+        cur.execute("alter table narr_erc_categorical add column id serial primary key")
     conn.commit()
 
     cur.close()
     conn.close()
+
+    print('Done')
 
     return
 
@@ -806,11 +816,13 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
     # csv for Julia import
     df_NARR_ERC.set_index(['lat','lon','time'], inplace=True) # Not ['lon','lat','time'] as previously
     df_NARR_ERC.reset_index(inplace=True)
-    # Remove invalid values (fill values) all of which are -32979:
+    # Remove invalid values (fill values) all of which are -32767:
     # print('df_NARR rows before rounding ERC:\n', df_NARR_ERC.count())
-    df_NARR_ERC = df_NARR_ERC[df_NARR_ERC['ERC'] > 0]
-    print('df_NARR_ERC rows after rounding ERC:\n', df_NARR_ERC.count())
+    # REMOVING THIS PROCESS: ##############################
+    # df_NARR_ERC = df_NARR_ERC[df_NARR_ERC['ERC'] > 0]
+    #######################################################
     df_NARR_ERC = df_NARR_ERC.round({'ERC':0})
+    print('df_NARR_ERC row count after rounding ERC:\n', df_NARR_ERC.count())
     print('df_NARR_ERC rows after rounding ERC to nearest integer and removing invalid values:\n', df_NARR_ERC)
 
     # Index values (lon and lat) have carry out to many decimals (e.g. 42.058800000000000002)
@@ -823,8 +835,8 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
     print('df_NARR_ERC after rounding lat lon values:\n', df_NARR_ERC)
 
     # Bin ERC values. Export below as df_NARR_ERC_categorical:
-    erc_bins = [-1,19,27,35,44,500]
-    erc_labels = ['low','moderate','high','very high','extreme']
+    erc_bins = [-32768,-1,19,27,35,44,500]
+    erc_labels = ['invalid','low','moderate','high','very high','extreme']
     # Cutting returns a series with categorical ERC values
     s_ERC_categorical = pd.cut(df_NARR_ERC['ERC'], bins=erc_bins, labels=erc_labels)
     print('s_ERC_categorical:\n', s_ERC_categorical)
@@ -877,29 +889,31 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     df.set_index('time', inplace=True)
     print('df.index:\n', df.index[0:100])
 
-    # Convert timepoint to build contour plot from ERC data
+    # Convert timepoint to year,month,date format for building contour plot from ERC data
     plot_date = datetime.strptime(plot_date, '%Y,%m,%d')
     print('plot_date:', plot_date)
     # Get the ERC data for the day specified
-    df_t0 = df[(df.index == plot_date)]
+    df_t = df[(df.index == plot_date)]
+    # Replace ERC = -32767 values with -1:
+    df_t['ERC'].replace(-32767, -1, inplace=True)
+    print('df_t, -32767 replaced with -1:\n', df_t)
     # Split into constituents
-    x_t0 = df_t0['lon'].values.tolist()
-    y_t0 = df_t0['lat'].values.tolist()
-    z_t0 = df_t0['ERC'].values.tolist()
-    print('df_t0:\n', df_t0)
-    # print('Shape x_t0:\n', np.shape(x_t0))
-    # print('Shape y_t0:\n', np.shape(y_t0))
-    # print('Shape z_t0:\n', np.shape(z_t0))
+    x_t = df_t['lon'].values.tolist()
+    y_t = df_t['lat'].values.tolist()
+    z_t = df_t['ERC'].values.tolist()
+    # print('Shape x_t:\n', np.shape(x_t))
+    # print('Shape y_t:\n', np.shape(y_t))
+    # print('Shape z_t:\n', np.shape(z_t))
 
     plt.close()
     f, ax = plt.subplots(1,2, figsize=(8,3), sharex=True, sharey=True)
 
-    ax[0].tripcolor(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # Plots across all timepoints?
-    ax[0].plot(x_t0, y_t0, 'ko ', markersize=1)
+    ax[0].tripcolor(x_t, y_t, z_t, 30, cmap=cm.jet) # Plots across all timepoints?
+    ax[0].plot(x_t, y_t, 'ko ', markersize=1)
     ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
 
-    tcf = ax[1].tricontourf(x_t0, y_t0, z_t0, 30, cmap=cm.jet) # 20 contour levels is good quality
-    ax[1].plot(x_t0, y_t0, 'ko ', markersize=1)
+    tcf = ax[1].tricontourf(x_t, y_t, z_t, 30, cmap=cm.jet) # 20 contour levels is good quality
+    ax[1].plot(x_t, y_t, 'ko ', markersize=1)
     ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
     f.colorbar(tcf)
 
@@ -920,8 +934,10 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
 
     df_NARR_ERC_lon_lat_time_series = df_NARR_ERC.loc[(plot_lat[0], plot_lon[0])]
 
-    # OR time series:
+    # OR time series (cumulative sums):
     df_NARR_ERC_lon_lat_time_series_0 = df_NARR_ERC.loc[(plot_lat[0], plot_lon[0])]
+    df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500'].cumsum(axis=0)
+    df_NARR_ERC_lon_lat_time_series_0.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_0.loc[:,'PMSL'].cumsum(axis=0)
     df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Grad X'].cumsum(axis=0)
     df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Grad Y'].cumsum(axis=0)
     df_NARR_ERC_lon_lat_time_series_0.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_0.loc[:,'PMSL Grad X'].cumsum(axis=0)
@@ -929,236 +945,268 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     df_NARR_ERC_lon_lat_time_series_0.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_0.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    df_NARR_ERC_lon_lat_time_series_1 = df_NARR_ERC.loc[(plot_lat[1], plot_lon[1])]
-    df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_1.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_1.loc[:,'CAPE'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1 = df_NARR_ERC.loc[(plot_lat[1], plot_lon[1])]
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_1.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_1.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_1.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    df_NARR_ERC_lon_lat_time_series_2 = df_NARR_ERC.loc[(plot_lat[2], plot_lon[2])]
-    df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_2.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_2.loc[:,'CAPE'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2 = df_NARR_ERC.loc[(plot_lat[2], plot_lon[2])]
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_2.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_2.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_2.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    df_NARR_ERC_lon_lat_time_series_3 = df_NARR_ERC.loc[(plot_lat[3], plot_lon[3])]
-    df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_3.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_3.loc[:,'CAPE'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3 = df_NARR_ERC.loc[(plot_lat[3], plot_lon[3])]
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_3.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_3.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_3.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    # WA time series:
-    df_NARR_ERC_lon_lat_time_series_4 = df_NARR_ERC.loc[(plot_lat[4], plot_lon[4])]
-    df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_4.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_4.loc[:,'CAPE'].cumsum(axis=0)
+    # # WA time series (cumulative sums):
+    # df_NARR_ERC_lon_lat_time_series_4 = df_NARR_ERC.loc[(plot_lat[4], plot_lon[4])]
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_4.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_4.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_4.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    df_NARR_ERC_lon_lat_time_series_5 = df_NARR_ERC.loc[(plot_lat[5], plot_lon[5])]
-    df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_5.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_5.loc[:,'CAPE'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5 = df_NARR_ERC.loc[(plot_lat[5], plot_lon[5])]
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_5.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_5.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_5.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    df_NARR_ERC_lon_lat_time_series_6 = df_NARR_ERC.loc[(plot_lat[6], plot_lon[6])]
-    df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_6.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_6.loc[:,'CAPE'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6 = df_NARR_ERC.loc[(plot_lat[6], plot_lon[6])]
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_6.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_6.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_6.loc[:,'CAPE'].cumsum(axis=0)
 
 
-    df_NARR_ERC_lon_lat_time_series_7 = df_NARR_ERC.loc[(plot_lat[7], plot_lon[7])]
-    df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad X'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad Y'].cumsum(axis=0)
-    df_NARR_ERC_lon_lat_time_series_7.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_7.loc[:,'CAPE'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7 = df_NARR_ERC.loc[(plot_lat[7], plot_lon[7])]
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'H500 Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad X CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad X'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad Y CS'] = df_NARR_ERC_lon_lat_time_series_7.loc[:,'PMSL Grad Y'].cumsum(axis=0)
+    # df_NARR_ERC_lon_lat_time_series_7.loc[:,'CAPE CS']           = df_NARR_ERC_lon_lat_time_series_7.loc[:,'CAPE'].cumsum(axis=0)
 
-    # print('df_NARR_ERC_lon_lat_time_series:\n', df_NARR_ERC_lon_lat_time_series)
-
-
-
-
-    # -------------------------------------------------------------------
-    # OR time series
-    plt.close()
-    # Plotting three time series of df_NARR_ERC data at a lon-lat time:
-    # 1) H500 X and Y Gradients
-    # 2) PMSL X and Y Gradients 
-    # 3) CAPE
-    # 4) ERC
-    fig, ax = plt.subplots(4,7, figsize=(16,14))
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad X CS', legend=True, ax=ax[0,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad Y CS', legend=True, ax=ax[0,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[0,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[0,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad X CS', legend=True, ax=ax[0,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad Y CS', legend=True, ax=ax[0,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='CAPE', legend=True, ax=ax[0,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='CAPE CS', legend=True, ax=ax[0,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='ERC', legend=True, ax=ax[0,6], color='r')
-
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad X', legend=False, ax=ax[1,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[1,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[1,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[1,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[1,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[1,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[1,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[1,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='CAPE', legend=False, ax=ax[1,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='CAPE CS', legend=False, ax=ax[1,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='ERC', legend=False, ax=ax[1,6], color='r')
-
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad X', legend=False, ax=ax[2,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[2,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[2,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[2,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[2,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[2,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[2,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[2,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='CAPE', legend=False, ax=ax[2,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='CAPE CS', legend=False, ax=ax[2,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='ERC', legend=False, ax=ax[2,6], color='r')
-
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad X', legend=False, ax=ax[3,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[3,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[3,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[3,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[3,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[3,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[3,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[3,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='CAPE', legend=False, ax=ax[3,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='CAPE CS', legend=False, ax=ax[3,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='ERC', legend=False, ax=ax[3,6], color='r')
+    # # print('df_NARR_ERC_lon_lat_time_series:\n', df_NARR_ERC_lon_lat_time_series)
 
 
-    ax[0,0].set_xlabel('Date')
-    ax[0,0].set_title('H500 Gradients, gpm/deg')
-    # ax[0,1].set_xlabel('Date')
-    ax[0,1].set_title('H500 Grad CS, gpm/deg')
 
-    ax[2,2].set_xlabel('Date')
-    ax[0,2].set_title('PMSL Gradients, Pa/deg')
+
+    # # -------------------------------------------------------------------
+    # # OR time series
+    # plt.close()
+    # # Plotting three time series of df_NARR_ERC data at a lon-lat time:
+    # # 1) H500 X and Y Gradients
+    # # 2) PMSL X and Y Gradients 
+    # # 3) CAPE
+    # # 4) ERC
+    # fig, ax = plt.subplots(4,8, figsize=(16,14))
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad X CS', legend=True, ax=ax[0,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500 Grad Y CS', legend=True, ax=ax[0,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[0,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[0,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad X CS', legend=True, ax=ax[0,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL Grad Y CS', legend=True, ax=ax[0,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='CAPE', legend=True, ax=ax[0,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='CAPE CS', legend=True, ax=ax[0,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='ERC', legend=True, ax=ax[0,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='H500', legend=True, ax=ax[0,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_0.plot(x='time', y='PMSL', legend=True, ax=ax[0,7], color='#5e8460', alpha=0.7)
+
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad X', legend=False, ax=ax[1,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[1,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[1,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[1,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[1,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[1,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[1,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[1,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='CAPE', legend=False, ax=ax[1,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='CAPE CS', legend=False, ax=ax[1,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='ERC', legend=False, ax=ax[1,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='H500', legend=True, ax=ax[1,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_1.plot(x='time', y='PMSL', legend=True, ax=ax[1,7], color='#5e8460', alpha=0.7)
+
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad X', legend=False, ax=ax[2,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[2,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[2,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[2,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[2,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[2,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[2,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[2,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='CAPE', legend=False, ax=ax[2,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='CAPE CS', legend=False, ax=ax[2,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='ERC', legend=False, ax=ax[2,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='H500', legend=True, ax=ax[2,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_2.plot(x='time', y='PMSL', legend=True, ax=ax[2,7], color='#5e8460', alpha=0.7)
+
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad X', legend=False, ax=ax[3,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[3,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[3,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[3,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[3,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[3,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[3,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[3,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='CAPE', legend=False, ax=ax[3,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='CAPE CS', legend=False, ax=ax[3,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='ERC', legend=False, ax=ax[3,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='H500', legend=True, ax=ax[3,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_3.plot(x='time', y='PMSL', legend=True, ax=ax[3,7], color='#5e8460', alpha=0.7)
+
+    # ax[0,0].set_xlabel('Date')
+    # ax[0,0].set_title('H500 Gradients, gpm/deg')
+    # # ax[0,1].set_xlabel('Date')
+    # ax[0,1].set_title('H500 Grad CS, gpm/deg')
+
+    # ax[2,2].set_xlabel('Date')
+    # ax[0,2].set_title('PMSL Gradients, Pa/deg')
+    # # ax[2,3].set_xlabel('Date')
+    # ax[0,3].set_title('PMSL Grad CS, Pa/deg')
+
+    # ax[2,2].set_xlabel('Date')
+    # # ax[0,2].set_title('CAPE, J/kg')
+    # ax[0,2].set_title('H500 & PMSL')
     # ax[2,3].set_xlabel('Date')
-    ax[0,3].set_title('PMSL Grad CS, Pa/deg')
+    # ax[0,3].set_title('ERC')
 
-    ax[2,2].set_xlabel('Date')
-    ax[0,2].set_title('CAPE, J/kg')
-    ax[2,3].set_xlabel('Date')
-    ax[0,3].set_title('ERC')
-    
-    ax[0,0].set_ylabel('Kalmiopsis')
-    ax[1,0].set_ylabel('Bend')
-    ax[2,0].set_ylabel('John Day')
-    ax[3,0].set_ylabel('Medford')
+    # ax[0,0].set_ylabel('Kalmiopsis')
+    # ax[1,0].set_ylabel('Bend')
+    # ax[2,0].set_ylabel('John Day')
+    # ax[3,0].set_ylabel('Medford')
 
-    plt.savefig('NARR_ERC_lon_lat_time_series_OR.png', bbox_inches='tight')
-    plt.show()
-    # -------------------------------------------------------------------
+    # plt.savefig('NARR_ERC_lon_lat_time_series_OR.png', bbox_inches='tight')
+    # plt.show()
+    # # -------------------------------------------------------------------
 
 
-    # -------------------------------------------------------------------
-    # WA time series
-    plt.close()
-    # Plotting three time series of df_NARR_ERC data at a lon-lat time:
-    # 1) H500 X and Y Gradients
-    # 2) PMSL X and Y Gradients 
-    # 3) CAPE
-    # 4) ERC
-    fig, ax = plt.subplots(4,7, figsize=(16,14))
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad X CS', legend=True, ax=ax[0,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad Y CS', legend=True, ax=ax[0,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[0,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[0,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad X CS', legend=True, ax=ax[0,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad Y CS', legend=True, ax=ax[0,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='CAPE', legend=True, ax=ax[0,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='CAPE CS', legend=True, ax=ax[0,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='ERC', legend=True, ax=ax[0,6], color='r')
+    # # -------------------------------------------------------------------
+    # # WA time series
+    # plt.close()
+    # # Plotting three time series of df_NARR_ERC data at a lon-lat time:
+    # # 1) H500 X and Y Gradients
+    # # 2) PMSL X and Y Gradients
+    # # 3) CAPE
+    # # 4) ERC
+    # fig, ax = plt.subplots(4,8, figsize=(16,14))
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad X', legend=True, ax=ax[0,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad Y', legend=True, ax=ax[0,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad X CS', legend=True, ax=ax[0,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500 Grad Y CS', legend=True, ax=ax[0,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad X', legend=True, ax=ax[0,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad Y', legend=True, ax=ax[0,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad X CS', legend=True, ax=ax[0,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL Grad Y CS', legend=True, ax=ax[0,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='CAPE', legend=True, ax=ax[0,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='CAPE CS', legend=True, ax=ax[0,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='ERC', legend=True, ax=ax[0,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='H500', legend=True, ax=ax[0,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_4.plot(x='time', y='PMSL', legend=True, ax=ax[0,7], color='#5e8460', alpha=0.7)
 
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad X', legend=False, ax=ax[1,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[1,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[1,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[1,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[1,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[1,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[1,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[1,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='CAPE', legend=False, ax=ax[1,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='CAPE CS', legend=False, ax=ax[1,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='ERC', legend=False, ax=ax[1,6], color='r')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad X', legend=False, ax=ax[1,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[1,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[1,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[1,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[1,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[1,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[1,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[1,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='CAPE', legend=False, ax=ax[1,4], color='orange')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='ERC', legend=True, ax=ax[1,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='H500', legend=True, ax=ax[1,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_5.plot(x='time', y='PMSL', legend=True, ax=ax[1,7], color='#5e8460', alpha=0.7)
 
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad X', legend=False, ax=ax[2,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[2,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[2,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[2,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[2,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[2,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[2,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[2,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='CAPE', legend=False, ax=ax[2,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='CAPE CS', legend=False, ax=ax[2,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='ERC', legend=False, ax=ax[2,6], color='r')
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad X', legend=False, ax=ax[2,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[2,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[2,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[2,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[2,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[2,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[2,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[2,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='CAPE', legend=False, ax=ax[2,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='CAPE CS', legend=False, ax=ax[2,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='ERC', legend=True, ax=ax[2,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='H500', legend=True, ax=ax[2,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_6.plot(x='time', y='PMSL', legend=True, ax=ax[2,7], color='#5e8460', alpha=0.7)
 
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad X', legend=False, ax=ax[3,0], color='k')
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[3,0], color='g')
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[3,1], color='k', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[3,1], color='g', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[3,2], color='gray')
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[3,2], color='m')
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[3,3], color='gray', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[3,3], color='m', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='CAPE', legend=False, ax=ax[3,4], color='orange')
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='CAPE CS', legend=False, ax=ax[3,5], color='orange', alpha=0.7)
-    df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='ERC', legend=False, ax=ax[3,6], color='r')
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad X', legend=False, ax=ax[3,0], color='k')
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad Y', legend=False, ax=ax[3,0], color='g')
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad X CS', legend=False, ax=ax[3,1], color='k', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500 Grad Y CS', legend=False, ax=ax[3,1], color='g', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad X', legend=False, ax=ax[3,2], color='gray')
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad Y', legend=False, ax=ax[3,2], color='m')
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad X CS', legend=False, ax=ax[3,3], color='gray', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL Grad Y CS', legend=False, ax=ax[3,3], color='m', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='CAPE', legend=False, ax=ax[3,4], color='orange')
+    # # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='CAPE CS', legend=False, ax=ax[3,5], color='orange', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='ERC', legend=True, ax=ax[3,5], color='r')
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='H500', legend=True, ax=ax[3,6], color='#304ed3', alpha=0.7)
+    # df_NARR_ERC_lon_lat_time_series_7.plot(x='time', y='PMSL', legend=True, ax=ax[3,7], color='#5e8460', alpha=0.7)
 
-    ax[0,0].set_xlabel('Date')
-    ax[0,0].set_title('H500 Gradients, gpm/deg')
-    # ax[0,1].set_xlabel('Date')
-    ax[0,1].set_title('H500 Grad CS, gpm/deg')
+    # ax[0,0].set_xlabel('Date')
+    # ax[0,0].set_title('H500 Gradients, gpm/deg')
+    # # ax[0,1].set_xlabel('Date')
+    # ax[0,1].set_title('H500 Grad CS, gpm/deg')
 
-    ax[2,2].set_xlabel('Date')
-    ax[0,2].set_title('PMSL Gradients, Pa/deg')
+    # ax[2,2].set_xlabel('Date')
+    # ax[0,2].set_title('PMSL Gradients, Pa/deg')
+    # # ax[2,3].set_xlabel('Date')
+    # ax[0,3].set_title('PMSL Grad CS, Pa/deg')
+
+    # ax[2,2].set_xlabel('Date')
+    # # ax[0,2].set_title('CAPE, J/kg')
+    # ax[0,2].set_title('H500 & PMSL')
     # ax[2,3].set_xlabel('Date')
-    ax[0,3].set_title('PMSL Grad CS, Pa/deg')
-
-    ax[2,2].set_xlabel('Date')
-    ax[0,2].set_title('CAPE, J/kg')
-    ax[2,3].set_xlabel('Date')
-    ax[0,3].set_title('ERC')
+    # ax[0,3].set_title('ERC')
     
-    ax[0,0].set_ylabel('Olympics')
-    ax[1,0].set_ylabel('Snoqualmie')
-    ax[2,0].set_ylabel('Colville')
-    ax[3,0].set_ylabel('N Cascades')
+    # ax[0,0].set_ylabel('Olympics')
+    # ax[1,0].set_ylabel('Snoqualmie')
+    # ax[2,0].set_ylabel('Colville')
+    # ax[3,0].set_ylabel('N Cascades')
 
-    plt.savefig('NARR_ERC_lon_lat_time_series_WA.png', bbox_inches='tight')
-    plt.show()
+    # plt.savefig('NARR_ERC_lon_lat_time_series_WA.png', bbox_inches='tight')
+    # plt.show()
     # -------------------------------------------------------------------
-
 
     # -------------------------------------------------------------------
     # Printing stationary time series of variables:
     df_NARR_ERC_lon_lat_time_series_0.set_index('time', inplace=True)
+    print('df_NARR_ERC_lon_lat_time_series_0:\n', df_NARR_ERC_lon_lat_time_series_0)
     df_NARR_ERC_lon_lat_time_series_0.diff().plot(figsize=(9,6))
+    print('df_NARR_ERC_lon_lat_time_series_0.diff():\n', df_NARR_ERC_lon_lat_time_series_0.diff())
+
     plt.xlabel('time')
     plt.title('Stationary Time Series - Kalmiopsis')
     plt.show()
@@ -1209,9 +1257,10 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 
 # ----------------------------------------
 ''' Writing CSV files to Postgres '''
-# table = 'narr_erc_categorical'        # narr, narr_erc, narr_erc_categorical
+# table = 'narr'        # narr, narr_erc, narr_erc_categorical
 # fire_weather_db(table)
 # ----------------------------------------
+
 
 # ----------------------------------------
 ''' Import NARR data (rectilinear grid) '''
@@ -1228,6 +1277,7 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir)
 # ----------------------------------------
 
+
 # ----------------------------------------
 ''' Import all gridMET CSVs '''
 # gridMET_csv_in_dir  = '/home/dp/Documents/FWP/gridMET/csv/'
@@ -1235,6 +1285,7 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 
 # import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir)
 # ----------------------------------------
+
 
 # ----------------------------------------
 # ''' Merge NARR and gridMET '''
@@ -1248,6 +1299,7 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
 # ----------------------------------------
 
+
 # ----------------------------------------
 ''' Plot NARR and gridMET data '''
 # plot_date               = '1979,08,10'
@@ -1258,10 +1310,251 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir)
 # ----------------------------------------
 
+
 # ----------------------------------------
 ''' Run synvar_pickle_to_csv '''
 # synvar_pickle_to_csv('df_all_synvar_grid_interp.pkl','df_all_synvar_grid_interp.csv',['H500 Grad X'])
 # ----------------------------------------
+
+def plot_SOM_results__Julia(csv_import_dir):
+    # ------------------------------------------------------------------------------------
+    # PURPOSE: This function plots the following csv files from Julia training and testing SOM runs:
+    #   
+    #   Training:
+    #       FWP_SOM_trained_specific_diff.csv
+    #       FWP_SOM_trained_specific_codes.csv
+    #       FWP_SOM_trained_specific_pop.csv
+    #   
+    #   Testing data:
+    #       FWP_SOM_testing_specific_diff.csv
+    #       FWP_SOM_testing_specific_codes.csv
+    #       FWP_SOM_testing_specific_pop.csv
+    #
+    # The _diff files show the difference between the final trained or tested
+    # codebook vectors and the initialized codebook vectors.
+    #
+    # Dozens of SOMs are trained and tested to cover a wide range of timepoints
+    # in the development of a final SOM to show learning (SOM.jl doesn't keep track
+    # of learning information on its own)
+    #
+    # IMPROVEMENTS: Use glob to get csv file list, iterate through each file, importing and
+    #               plotting it, and saving the plot.
+    # ------------------------------------------------------------------------------------
+
+    # Trained SOM:
+    df_som_learn = pd.read_csv(csv_import_dir+'FWP_SOM_trained_specific_diff.csv')
+    num_cols = len(df_som_learn.columns)
+    col_names = [str(x) for x in range(1,num_cols+1)]
+    df_som_learn.columns = col_names
+    # print('df_som_learn:\n', df_som_learn)
+    df_som_learn_rolling = df_som_learn.rolling(10).mean()
+    print('df_som_learn_rolling:\n', df_som_learn_rolling)
+    plt.figure()
+    plt.plot(df_som_learn)
+    plt.plot(df_som_learn_rolling)
+    plt.legend(['1','2','3','4'])
+    plt.xlabel('Iteration')
+    plt.ylabel('Final Trained Weight - Initial Train Weight')
+    plt.title('Final Trained SOMs - Initalized Train SOM: 3rd neuron\'s weights')
+    plt.savefig('SOM_Trained_Diffs.png', bbox_inches='tight')
+    plt.show()
+
+    # Tested SOM:
+    df_som_learn = pd.read_csv(csv_import_dir+'FWP_SOM_tested_specific_diff.csv')
+    num_cols = len(df_som_learn.columns)
+    col_names = [str(x) for x in range(1,num_cols+1)]
+    df_som_learn.columns = col_names
+    df_som_learn_rolling = df_som_learn.rolling(10).mean()
+    plt.figure()
+    plt.plot(df_som_learn)
+    plt.plot(df_som_learn_rolling)
+    plt.legend(['1','2','3','4'])
+    plt.xlabel('Iteration')
+    plt.ylabel('Final Tested Weight - Initial Test Weight')
+    plt.title('Final Tested SOMs - Initalized Test SOM: 15th neuron\'s weights')
+    plt.savefig('SOM_Tested_Diffs.png', bbox_inches='tight')
+    plt.show()
+    # ------------------------------------------------------------------------------------
+    df_som_code = pd.read_csv(csv_import_dir+'FWP_SOM_trained_specific_codes.csv')
+    num_cols = len(df_som_code.columns)
+    col_names = [str(x) for x in range(1,num_cols+1)]
+    df_som_code.columns = col_names
+    print('df_som_code:\n', df_som_code)
+    df_som_code_rolling = df_som_code.rolling(10).mean()
+    plt.figure()
+    plt.plot(df_som_code)
+    plt.plot(df_som_code_rolling)
+    plt.legend(['1','2','3','4'])
+    plt.xlabel('Iteration')
+    plt.ylabel('Weight')
+    plt.title('Final Trained SOMs: 15th neuron\'s weights')
+    plt.savefig('SOM_Trained_Codes.png', bbox_inches='tight')
+    plt.show()
+   
+    df_som_code = pd.read_csv(csv_import_dir+'FWP_SOM_tested_specific_codes.csv')
+    num_cols = len(df_som_code.columns)
+    col_names = [str(x) for x in range(1,num_cols+1)]
+    df_som_code.columns = col_names
+    df_som_code_rolling = df_som_code.rolling(10).mean()
+    plt.figure()
+    plt.plot(df_som_code)
+    plt.plot(df_som_code_rolling)
+    plt.legend(['1','2','3','4'])
+    plt.xlabel('Iteration')
+    plt.ylabel('Weight')
+    plt.title('Final Tested SOMs: 15th neuron\'s weights')
+    plt.savefig('SOM_Tested_Codes.png', bbox_inches='tight')
+    plt.show()
+    # ------------------------------------------------------------------------------------
+
+    df_som_pop = pd.read_csv(csv_import_dir+'FWP_SOM_trained_specific_pop.csv')
+    num_cols = len(df_som_pop.columns)
+    col_names = [str(x) for x in range(1,num_cols+1)]
+    df_som_pop.columns = col_names
+    print('df_som_pop:\n', df_som_pop)
+    df_som_pop_rolling = df_som_pop.rolling(50).mean()
+    plt.figure()
+    plt.plot(df_som_pop)
+    plt.plot(df_som_pop_rolling)
+    plt.xlabel('Iteration')
+    plt.ylabel('Population')
+    plt.title('Final Trained SOMs: Ten neuron\'s populations')
+    plt.savefig('SOM_Trained_Populations.png', bbox_inches='tight')
+    plt.show()
+
+    df_som_pop = pd.read_csv(csv_import_dir+'FWP_SOM_tested_specific_pop.csv')
+    num_cols = len(df_som_pop.columns)
+    col_names = [str(x) for x in range(1,num_cols+1)]
+    df_som_pop.columns = col_names
+    df_som_pop_rolling = df_som_pop.rolling(50).mean()
+    plt.figure()
+    plt.plot(df_som_pop)
+    plt.plot(df_som_pop_rolling)
+    plt.xlabel('Iteration')
+    plt.ylabel('Population')
+    plt.title('Final Tested SOM Populations: Ten neuron\'s populations')
+    plt.savefig('SOM_Tested_Populations.png', bbox_inches='tight')
+    plt.show()
+
+    return
+
+
+
+# This function imports df_NARR_ERC_categorical.csv and processes it for export to csv format
+# for SOM training in R and Julia:
+def export_NARR_ERC__R():
+    # Exporting gradients and ERC to csv:
+    df = pd.read_csv('/home/dp/Documents/FWP/NARR_gridMET/csv/df_NARR_ERC_categorical.csv', header='infer')
+    print('df:\n', df)
+    # cols = ['time','H500 Grad X', 'H500 Grad Y', 'PMSL Grad X', 'PMSL Grad Y', 'ERC']
+    cols = ['time','H500', 'ERC'] # Selecting the desired columns
+    start_date_str = '1979-06-01'
+    # end_date_str =   '1979-08-31'
+    end_date_str =   '1979-06-30'
+    # export_filename = 'NARR_ERC_June_thru_August_1979_gradients_categorical.csv'
+    export_filename = 'NARR_ERC_June_1979_h500_only_categorical.csv'
+
+    df = df[cols]
+    invalid_mask = (df['ERC'] != 'invalid')
+    print('invalid_mask:\n', invalid_mask)
+    df = df.loc[ invalid_mask ]   # removing invalid ERC
+    df['time'] = pd.to_datetime(df['time'])                 # convert time column to datetime
+    df.set_index('time', inplace=True)                                # set time column to index
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()             # specify start and end dates
+    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    df = df.loc[[start_date,end_date]]                 # get data from date range
+    df.reset_index(drop=True, inplace=True) # Don't need time index anymore
+
+    # Scaling:
+    x = df[cols[1:-1]] # cols[1,-1] avoids first time column and last ERC column
+    y = df[['ERC']]
+    x_train, x_test, y_train, y_test = train_test_split(x, y , train_size=0.7, random_state=90)
+    print('x_train:\n', x_train)
+    print('y_train:\n', y_train)
+
+    # Normalize Training Data (std_scale is used on train and test data)
+    std_scale = preprocessing.StandardScaler().fit(x_train)
+    
+    x_train_norm = std_scale.transform(x_train) # x_train_norm is a numpy array
+    #Converting numpy array to dataframe
+    x_train_norm = pd.DataFrame(x_train_norm, index=x_train.index, columns=x_train.columns) 
+
+
+    # Normalize Testing Data by using mean and SD of training set
+    x_test_norm = std_scale.transform(x_test) # x_test_norm is a numpy array
+    x_test_norm = pd.DataFrame(x_test_norm, index=x_test.index, columns=x_test.columns)
+
+    # WARNING: NOT USING ANY AXIS ALIGNMENT. THIS WORKS BUT MAY NOT BE GOOD PRACTICE.
+    xy_train = pd.concat((x_train, y_train), axis=1)
+    xy_test = pd.concat((x_test, y_test), axis=1)
+    xy_train_norm = pd.concat((x_train_norm, y_train), axis=1)
+    xy_test_norm = pd.concat((x_test_norm, y_test), axis=1)
+
+    # NOTE: THE EXPORT FILENAMES ARE GENERIC. SHOULD FIND A MORE SUITABLE NAME.
+    # Export to R folder
+    x_train.to_csv('/home/dp/Documents/FWP/R/x_train.csv', index=False)
+    x_test.to_csv('/home/dp/Documents/FWP/R/x_test.csv', index=False)
+    y_train.to_csv('/home/dp/Documents/FWP/R/y_train.csv', index=False)
+    y_test.to_csv('/home/dp/Documents/FWP/R/y_test.csv', index=False)
+    xy_train.to_csv('/home/dp/Documents/FWP/R/xy_train.csv', index=False)
+    xy_test.to_csv('/home/dp/Documents/FWP/R/xy_test.csv', index=False)
+    x_train_norm.to_csv('/home/dp/Documents/FWP/R/x_train_norm.csv', index=False)
+    x_test_norm.to_csv('/home/dp/Documents/FWP/R/x_test_norm.csv', index=False)
+    xy_train_norm.to_csv('/home/dp/Documents/FWP/R/xy_train_norm.csv', index=False)
+    xy_test_norm.to_csv('/home/dp/Documents/FWP/R/xy_test_norm.csv', index=False)
+
+    # Export to Julia folder
+    x_train.to_csv('/home/dp/Documents/FWP/Julia/x_train.csv', index=False)
+    x_test.to_csv('/home/dp/Documents/FWP/Julia/x_test.csv', index=False)
+    y_train.to_csv('/home/dp/Documents/FWP/Julia/y_train.csv', index=False)
+    y_test.to_csv('/home/dp/Documents/FWP/Julia/y_test.csv', index=False)
+    xy_train.to_csv('/home/dp/Documents/FWP/Julia/xy_train.csv', index=False)
+    xy_test.to_csv('/home/dp/Documents/FWP/Julia/xy_test.csv', index=False)
+    x_train_norm.to_csv('/home/dp/Documents/FWP/Julia/x_train_norm.csv', index=False)
+    x_test_norm.to_csv('/home/dp/Documents/FWP/Julia/x_test_norm.csv', index=False)
+    xy_train_norm.to_csv('/home/dp/Documents/FWP/Julia/xy_train_norm.csv', index=False)
+    xy_test_norm.to_csv('/home/dp/Documents/FWP/Julia/xy_test_norm.csv', index=False)
+
+    return
+
+
+
+def plot_SOM_results__R():
+    changes100 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_100iters.csv', header=0, delim_whitespace=True)
+    changes200 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_200iters.csv', header=0, delim_whitespace=True)
+    changes400 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_400iters.csv', header=0, delim_whitespace=True)
+    changes800 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_800iters.csv', header=0, delim_whitespace=True)
+    changes1600 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_1600iters.csv', header=0, delim_whitespace=True)
+    changes2200 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_2200iters.csv', header=0, delim_whitespace=True)
+    changes4400 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_4400iters.csv', header=0, delim_whitespace=True)
+    # changes8800 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_8800iters.csv', header=0, delim_whitespace=True)
+
+    df = pd.DataFrame([])
+    df = pd.concat((changes100, changes200, changes400, changes800, changes1600, changes2200, changes4400), axis=1, ignore_index=True)
+    df.columns = ['100','200','400','800','1600','2200','4400']
+    
+    df.plot(y=['100','200','400','800','1600','2200','4400'], kind='line')
+    plt.show()
+
+    return
+
+
+# ----------------------------------------
+''' Import & plot SOM learning from Julia '''
+# csv_import_dir = '/home/dp/Documents/FWP/Julia/SOMs_H500_June_1979/'
+# plot_SOM_results__Julia(csv_import_dir)
+# ----------------------------------------
+
+# ----------------------------------------
+''' Export data for SOM processing in R '''
+export_NARR_ERC__R()
+# ----------------------------------------
+
+# ----------------------------------------
+''' Import & plot SOM learning from R '''
+# plot_SOM_results__R()
+# ----------------------------------------
+
 
 
 
