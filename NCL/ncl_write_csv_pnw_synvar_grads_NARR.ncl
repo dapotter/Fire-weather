@@ -20,6 +20,8 @@ begin
     
     ;-------  Laptop NARR data directories  -------
 
+    ; CAN ONLY PROCESS ABOUT 1000 netCDF FILES:
+
     ;cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/"        ; 3D directory
     ; cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/temp/"   ; Another 3D directory with different dates
     ; cdir = "/home/dp/Documents/FWP/NARR/3D_grib1_exp/nc/"     ; netCDF directory
@@ -33,36 +35,41 @@ begin
     ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/"       ; pbl is CAPE: directory Jan 1-3 files
     ;cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/"   ; pbl is CAPE: directory June 1-3 files
     ; cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/nc/"       ; netCDF directory
-    cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/nc/"   ; Another 3D directory with different dates
+    ; cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/nc/"   ; Another 3D directory with different dates
 
     ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of variables: directory covers Jan 1-3
 
 
     ;-------  Seagate NARR data directories  -------
     
-    ; cdir = "/mnt/seagate/NARR/3D_grib1/"                    ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/flx/"                         ; Seagate  - NARR data - flx - PMSL
-    ; cdir = "/mnt/seagate/NARR/pbl/"                         ; Seagate  - NARR data - pbl - CAPE
+    ; cdir =   "/mnt/seagate/NARR/3D/temp/"                    ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/flx/temp/"                         ; Seagate  - NARR data - flx - PMSL
+    ; cdir = "/mnt/seagate/NARR/pbl/temp/"                         ; Seagate  - NARR data - pbl - CAPE
 
-    grib_per_csv = 100   ; Set the number of grib files to go into one csv file. Max is 131 due to row limitations.
+    cdir = "/mnt/seagate/NARR/1980/3D/temp/nc/"
+
+    grib_per_csv = 100   ; Set the number of grib/netCDF files to go into one csv file. Max is 131 due to csv row limitations.
 
     ;-------  Grib or netCDF?  -------
     Grib               = False ; If processing Grib files
     netCDF             = True  ; If processing netCDF files
 
     ;-------  Grib SYNVAR  -------
-    ; SYNVAR             = "HGT_221_ISBL" ; for grib
+    SYNVAR             = "HGT_221_ISBL" ; for grib
+    SYNVAR             = "SPF_H_221_ISBL" ; for grib
     ; SYNVAR             = "PRMSL_221_MSL" ; for grib
     ; SYNVAR             = "CAPE_221_SPDY" ; for grib
 
     ;-------  netCDF SYNVAR  -------
-    ; SYNVAR             = "H500" ; for netCDF
+    SYNVAR             = "H500" ; for netCDF
+    SYNVAR             = "SPFH" ; for netCDF
     ; SYNVAR             = "PMSL" ; for netCDF
-    SYNVAR             = "CAPE" ; for netCDF
+    ; SYNVAR             = "CAPE" ; for netCDF
 
-    ; SYNABBR            = "H500"
+    SYNABBR            = "H500"
+    SYNABBR            = "SPFH"
     ; SYNABBR            = "PMSL"
-    SYNABBR            = "CAPE"
+    ; SYNABBR            = "CAPE"
 
  
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
@@ -73,6 +80,10 @@ begin
     if(SYNVAR .eq. "HGT_221_ISBL") then ; from grib
         list_cmd = " ; ls *.3D.grib1"
     elseif(SYNVAR .eq. "H500") then ; from netCDF
+        list_cmd = " ; ls *.3D.grib1.nc"
+    elseif(SYNVAR .eq. "SPF_H_221_ISBL") then ; from grib
+        list_cmd = " ; ls *.3D.grib1"
+    elseif(SYNVAR .eq. "SPFH") then ; from netCDF
         list_cmd = " ; ls *.3D.grib1.nc"
     elseif(SYNVAR .eq. "PRMSL_221_MSL") then ; from grib
         list_cmd = " ; ls *.flx.grib1"
@@ -98,7 +109,7 @@ begin
     
     ;--------------------- Initialize csv file parameters -------------------
     ;---Set csv file name
-    SYNNAME_CSV = "0_" + SYNABBR + ".csv"
+    SYNNAME_CSV = "00_" + SYNABBR + ".csv"
     
     ;---Add directory to csv file name
     csv_filename = cdir + SYNNAME_CSV
@@ -121,7 +132,6 @@ begin
     ;---Write header into the csv file
     write_table(csv_filename, "w", header, "%s")
     ;------------------------------------------------------------------------
-    
     
     endfile = nfiles-1
     c = 0
@@ -181,6 +191,8 @@ begin
         ;---Pick the data to write to CSV file
         if(SYNVAR .eq. "HGT_221_ISBL") then
             v    = f[i]->HGT_221_ISBL ; selects ith file's Geopotential height
+        elseif(SYNVAR .eq. "SPF_H_221_ISBL") then
+            v    = f[i]->SPF_H_221_ISBL ; selects ith file's Geopotential height
         elseif(SYNVAR .eq. "PRMSL_221_MSL") then
             v    = f[i]->PRMSL_221_MSL
         elseif(SYNVAR .eq. "CAPE_221_SPDY") then
@@ -205,7 +217,9 @@ begin
         
         ;---Decides level based on synoptic variable abbreviation
         if(SYNVAR .eq. "HGT_221_ISBL") then
-            SYNNAME = v(12,:,:)         ; H500 is at level 12 is assigned to 
+            SYNNAME = v(12,:,:)         ; H500 is at level 12
+        elseif(SYNVAR .eq. "SPF_H_221_ISBL") then
+            SYNNAME = v(12,:,:)         ; SPFH is at level 12
         elseif(SYNVAR .eq. "PRMSL_221_MSL" .or. SYNVAR .eq. "CAPE_221_SPDY") then
             SYNNAME = v(:,:)            ; CAPE and PMSL have no levels
         else ; If SYNVAR = H500, PMSL or CAPE
