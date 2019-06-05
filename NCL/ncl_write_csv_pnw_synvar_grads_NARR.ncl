@@ -54,20 +54,32 @@ begin
     Grib               = False ; If processing Grib files
     netCDF             = True  ; If processing netCDF files
 
+    ; If exporting one or multiple variables to csv:
+    single               = False ; Processing single var...
+    multi                = True  ; or multi var?
+
     ;-------  Grib SYNVAR  -------
-    SYNVAR             = "HGT_221_ISBL" ; for grib
-    SYNVAR             = "SPF_H_221_ISBL" ; for grib
+    ; SYNVAR             = "HGT_221_ISBL" ; for grib
     ; SYNVAR             = "PRMSL_221_MSL" ; for grib
     ; SYNVAR             = "CAPE_221_SPDY" ; for grib
 
     ;-------  netCDF SYNVAR  -------
-    SYNVAR             = "H500" ; for netCDF
-    SYNVAR             = "SPFH" ; for netCDF
+    SYNVAR             = "H500" ; for netCDF    
+    SYNVAR_2           = "TEMP"         ; Temperature, K
+    SYNVAR_3           = "PVEL"         ; Pressure vertical velocity, Pa/s
+    SYNVAR_4           = "SPFH"         ; Specific humidity, kg/kg
+    SYNVAR_5           = "CWTR"         ; Cloud water, kg/kg
+
     ; SYNVAR             = "PMSL" ; for netCDF
     ; SYNVAR             = "CAPE" ; for netCDF
 
-    SYNABBR            = "H500"
-    SYNABBR            = "SPFH"
+    ;-------  Grib or netCDF SYNABBR  -------
+    SYNABBR            = "H500"         ; Geopotential height, gpm
+    SYNABBR_2          = "TEMP"         ; Temperature, K
+    SYNABBR_3          = "PVEL"         ; Pressure vertical velocity, Pa/s
+    SYNABBR_4          = "SPFH"         ; Specific humidity, kg/kg
+    SYNABBR_5          = "CWTR"         ; Cloud water, kg/kg
+
     ; SYNABBR            = "PMSL"
     ; SYNABBR            = "CAPE"
 
@@ -80,10 +92,6 @@ begin
     if(SYNVAR .eq. "HGT_221_ISBL") then ; from grib
         list_cmd = " ; ls *.3D.grib1"
     elseif(SYNVAR .eq. "H500") then ; from netCDF
-        list_cmd = " ; ls *.3D.grib1.nc"
-    elseif(SYNVAR .eq. "SPF_H_221_ISBL") then ; from grib
-        list_cmd = " ; ls *.3D.grib1"
-    elseif(SYNVAR .eq. "SPFH") then ; from netCDF
         list_cmd = " ; ls *.3D.grib1.nc"
     elseif(SYNVAR .eq. "PRMSL_221_MSL") then ; from grib
         list_cmd = " ; ls *.flx.grib1"
@@ -110,6 +118,9 @@ begin
     ;--------------------- Initialize csv file parameters -------------------
     ;---Set csv file name
     SYNNAME_CSV = "00_" + SYNABBR + ".csv"
+    if(multi) then
+        SYNNAME_CSV = "00_" + "MULTI" + ".csv"
+    end if
     
     ;---Add directory to csv file name
     csv_filename = cdir + SYNNAME_CSV
@@ -118,12 +129,21 @@ begin
     system("rm -rf " + csv_filename)
 
     ;---Manually set header lines, SYNABBR is "H500" or "PMSL" or "CAPE")
-    if(netCDF) then
+    ;---This initiates the first csv file, and is repeated for every file in the loop below.
+    if(single) then
+        if(netCDF) then
+            SYNABBR_GRAD_X = SYNABBR + " Grad X"
+            SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
+            field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
+        else ; If 
+            field_names = (/ "time", "lon", "lat", SYNABBR /)
+        end if
+    end if
+
+    if(multi) then ; multi assumes netCDF
         SYNABBR_GRAD_X = SYNABBR + " Grad X"
         SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
-        field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
-    else ; If 
-        field_names = (/ "time", "lon", "lat", SYNABBR /)
+        field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y, SYNABBR_2, SYNABBR_3, SYNABBR_4, SYNABBR_5 /)
     end if
     
     ;---Merge column names into comma separated string
@@ -166,12 +186,20 @@ begin
             
             ;---Manually set header lines
             ;---If netCDF derived H500 or PMSL (SYNABBR is "H500" or "PMSL")
-            if(netCDF) then
+            if(single) then
+                if(netCDF) then
+                    SYNABBR_GRAD_X = SYNABBR + " Grad X"
+                    SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
+                    field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
+                else
+                    field_names = (/ "time", "lon", "lat", SYNABBR /)
+                end if
+            end if
+
+            if(multi) then ; multi assumes netCDF
                 SYNABBR_GRAD_X = SYNABBR + " Grad X"
                 SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
-                field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
-            else
-                field_names = (/ "time", "lon", "lat", SYNABBR /)
+                field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y, SYNABBR_2, SYNABBR_3, SYNABBR_4, SYNABBR_5 /)
             end if
 
             ;---Merge column names into comma separated string
@@ -191,8 +219,6 @@ begin
         ;---Pick the data to write to CSV file
         if(SYNVAR .eq. "HGT_221_ISBL") then
             v    = f[i]->HGT_221_ISBL ; selects ith file's Geopotential height
-        elseif(SYNVAR .eq. "SPF_H_221_ISBL") then
-            v    = f[i]->SPF_H_221_ISBL ; selects ith file's Geopotential height
         elseif(SYNVAR .eq. "PRMSL_221_MSL") then
             v    = f[i]->PRMSL_221_MSL
         elseif(SYNVAR .eq. "CAPE_221_SPDY") then
@@ -208,6 +234,12 @@ begin
             dvdx            = f[i]->$SYNVAR_GRAD_X$
             dvdy            = f[i]->$SYNVAR_GRAD_Y$
             ; print("v:"+v(0,0,0:100))
+            if(multi)
+                v2          = f[i]->$SYNVAR_2$
+                v3          = f[i]->$SYNVAR_3$
+                v4          = f[i]->$SYNVAR_4$
+                v5          = f[i]->$SYNVAR_5$
+            end if
         end if
 
         ;---Selecting SYNVAR over all of North America at 500 mbar level
@@ -222,10 +254,16 @@ begin
             SYNNAME = v(12,:,:)         ; SPFH is at level 12
         elseif(SYNVAR .eq. "PRMSL_221_MSL" .or. SYNVAR .eq. "CAPE_221_SPDY") then
             SYNNAME = v(:,:)            ; CAPE and PMSL have no levels
-        else ; If SYNVAR = H500, PMSL or CAPE
+        else ; If SYNVAR = H500, PMSL or CAPE, it came from a netCDF
             SYNNAME = v(:,:)
             SYNNAME_GRAD_X = dvdx(:,:)
             SYNNAME_GRAD_Y = dvdy(:,:)
+            if(multi) then
+                SYNNAME_2 = v2(:,:)
+                SYNNAME_3 = v3(:,:)
+                SYNNAME_4 = v4(:,:)
+                SYNNAME_5 = v5(:,:)
+            end if
         end if
 
         x    = f[i]->lon
@@ -258,6 +296,13 @@ begin
             SYNNAME_GRAD_Y_OR_WA = SYNNAME_GRAD_Y
         end if
 
+        if(multi) then
+            SYNNAME_2_OR_WA = SYNNAME_2
+            SYNNAME_3_OR_WA = SYNNAME_3
+            SYNNAME_4_OR_WA = SYNNAME_4
+            SYNNAME_5_OR_WA = SYNNAME_5
+        end if
+
         y_OR_WA = y_conf
         x_OR_WA = x_conf
         t_OR_WA = t_conf
@@ -267,6 +312,13 @@ begin
             SYNNAME_GRAD_X_OR_WA_1D   = ndtooned(SYNNAME_GRAD_X_OR_WA)
             SYNNAME_GRAD_Y_OR_WA_1D   = ndtooned(SYNNAME_GRAD_Y_OR_WA)
         end if
+        
+        if(multi) then
+            SYNNAME_2_OR_WA_1D   = ndtooned(SYNNAME_2_OR_WA)
+            SYNNAME_3_OR_WA_1D   = ndtooned(SYNNAME_3_OR_WA)
+            SYNNAME_4_OR_WA_1D   = ndtooned(SYNNAME_4_OR_WA)
+            SYNNAME_5_OR_WA_1D   = ndtooned(SYNNAME_5_OR_WA)
+        end if
 
         y_OR_WA_1d  = ndtooned(y_OR_WA)
         x_OR_WA_1d  = ndtooned(x_OR_WA)
@@ -274,14 +326,21 @@ begin
         ;print("t_OR_WA_1d:")
         ;print(t_OR_WA_1d)
 
-        ;---Write data to file        
-        if(netCDF) then ; for H500, PMSL or CAPE
-            alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D/]
-        else ; for CAPE
-            alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D/]
+        ;---Write data to file
+        if(single) then   
+            if(netCDF) then ; for H500, PMSL or CAPE
+                alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D/]
+            else ; for CAPE
+                alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D/]
+            end if
+            format = "%s,%g,%g,%g,%g,%g"
         end if
 
-        format = "%s,%g,%g,%g,%g,%g"
+        if(multi) then
+            alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D, SYNNAME_2_OR_WA_1D, SYNNAME_3_OR_WA_1D, SYNNAME_4_OR_WA_1D, SYNNAME_5_OR_WA_1D /]
+            format = "%s,%g,%g,%g,%g,%g,%g,%g,%g,%g"
+        end if
+
         print("csv directory: "+csv_filename)
         write_table(csv_filename, "a", alist, format)
         
