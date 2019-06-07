@@ -27,7 +27,6 @@ from sklearn import neighbors
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 
-
 import math
 import glob
 import os
@@ -461,7 +460,8 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
         print('df_narr:\n', df_narr)
 
     print('Exporting to CSV... (This could take a minute) ******************************')
-    df_narr.to_csv(NARR_csv_out_dir + 'df_NARR.csv', index=True, header=True)
+    # IF SHORT ON TIME, YOU MAY NOT WANT TO EXPORT THE ENTIRE 6 GB CSV FILE:
+    # df_narr.to_csv(NARR_csv_out_dir + 'df_NARR.csv', index=True, header=True)
 
     # NOTE: Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
     # Need to change the columns these access:
@@ -811,20 +811,26 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
         df_MULTI_partial.set_index(['lat','lon','time'], inplace=True)
         print('df_MULTI_partial:\n', df_MULTI_partial)
 
+        # BLOCKING THIS BECAUSE df_MULTI_partial GETS BIGGER WITH EACH ITERATION, THUS
+        # NO NEED TO PICKLE OUT ON EACH ITERATION, PICKLING OUT AT THE END ONCE THE LOOP
+        # IS COMPLETE:
         # Pickle naming (If the pickle number is single digit, add a prefix 0, otherwise use i for prefix):
-        if pkl_counter < export_interval:
-            pickle_name_narr = '0' + str(pkl_counter) + '_df_MULTI_partial.pkl'
-        else:
-            pickle_name_narr = str(pkl_counter) + 'df_MULTI_partial.pkl'
-        # Pickle out:
-        df_MULTI_partial.to_pickle(NARR_pkl_out_dir + pickle_name_narr)
+        # if pkl_counter < export_interval:
+        #     pickle_name_narr = '0' + str(pkl_counter) + '_df_MULTI_partial.pkl'
+        # else:
+        #     pickle_name_narr = str(pkl_counter) + '_df_MULTI_partial.pkl'
+        # # Pickle out:
+        # df_MULTI_partial.to_pickle(NARR_pkl_out_dir + pickle_name_narr)
 
         # CSV write (Unlike the pickle out above, here the data is written to one enormous csv file):
         df_MULTI = pd.concat((df_MULTI, df_MULTI_partial), axis=0)
         print('df_MULTI:\n', df_MULTI)
 
-    print('Exporting to CSV... (This could take a minute) ******************************')
-    df_MULTI.to_csv(NARR_csv_out_dir + 'df_MULTI.csv', index=True, header=True)
+    print('Exporting to pickle... *****************************')
+    df_MULTI.to_pickle(NARR_pkl_out_dir + 'df_MULTI.pkl')
+    # EXPORTING TO CSV TAKES SEVERAL MINUTES. IF TIME IS AN ISSUE, DON'T RUN THIS:
+    # print('Exporting to CSV... (This could take a minute) ******************************')
+    # df_MULTI.to_csv(NARR_csv_out_dir + 'df_MULTI.csv', index=True, header=True)
 
     # NOTE: Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
     # Need to change the columns these access:
@@ -1317,7 +1323,6 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     # plt.savefig('ERC_contour.png', bbox_inches='tight')
     # plt.show()
     # -------------------------------------------------------------------
-
 
     # Creating a dataframe at one latitude-longitude point across all time points:
     df_NARR_ERC.set_index(['lat','lon'], inplace=True)
@@ -2123,7 +2128,7 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 
 
 # ----------------------------------------
-''' Import NARR data (rectilinear grid) '''
+''' Import Multi 3D NARR data (rectilinear grid) '''
 # lon_min = 235
 # lat_min = 244
 # lon_max = 41
@@ -2131,37 +2136,77 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # import_interval = 2
 # export_interval = 10
 # multi = True
-# NARR_csv_in_dir  = '/home/dp/Documents/FWP/NARR/csv/1980/'  #'/mnt/seagate/NARR/3D/temp/csv/'  # '/home/dp/Documents/FWP/NARR/csv_exp/rectilinear_grid/'
-# NARR_csv_out_dir = '/home/dp/Documents/FWP/NARR/csv/1980/'     # Used in Postgres
-# NARR_pkl_out_dir = '/home/dp/Documents/FWP/NARR/pickle/1980/'     #'/home/dp/Documents/FWP/NARR/pickle_exp/rectilinear_grid/'
+# NARR_csv_in_dir  = '/home/dp/Documents/FWP/NARR/csv/1981/'  #'/mnt/seagate/NARR/3D/temp/csv/'  # '/home/dp/Documents/FWP/NARR/csv_exp/rectilinear_grid/'
+# NARR_csv_out_dir = '/home/dp/Documents/FWP/NARR/csv/1981/'     # Used in Postgres
+# NARR_pkl_out_dir = '/home/dp/Documents/FWP/NARR/pickle/1981/'     #'/home/dp/Documents/FWP/NARR/pickle_exp/rectilinear_grid/'
 
 # import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir)
 # ----------------------------------------
+
+
 def plot_multi_NARR_csv():
+    # IMPORT NARR MULTI 3D:
     # df = pd.read_csv('/home/dp/Documents/FWP/NARR/csv/1980/df_MULTI.csv', header='infer', index_col=None)
-    df = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/1980/13df_MULTI_partial.pkl')
+    df = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/1981/df_MULTI.pkl')
     df.reset_index(inplace=True)
     df.set_index(['lat','lon'], inplace=True)
     print('df:\n', df)
 
-    df_loc = df.loc[[39.0, 233.000]]
+    df_loc = df.loc[[(43.0784,241.412)]]# 39.0, 233.000)]]
     df.reset_index(inplace=True)
-    print('df_loc:\n', df_loc)
-    df_loc['SPFH RM'] = pd.Series(df_loc['SPFH']).rolling(30).mean()
-    f, (ax1, ax2, ax3, ax4) = plt.subplots(1,4, figsize=(12,5))
-    df_loc.plot(x='time', y='H500', ax=ax1)
-    df_loc.plot(x='time', y='TEMP', ax=ax2)
-    df_loc.plot(x='time', y='SPFH RM', ax=ax3)
-    df_loc.plot(x='time', y='CWTR', ax=ax4)
+    df_loc['SPFH RM'] = df_loc['SPFH'].rolling(30).mean()
+    print('df_loc[[SPFH, SPFH RM]]:\n', df_loc[['SPFH', 'SPFH RM']])
+
+    df_loc.reset_index(inplace=True)
+    df_loc.set_index('time', inplace=True)
+    # df_loc_fall = df_loc.loc['1981-09-15':'1981-11-15']
+    # print('df_loc_fall:\n', df_loc_fall.to_string())
+
+    df_loc.reset_index(inplace=True)
+    df.set_index(['lat','lon'], inplace=True)
+
+    # IMPORT ERC:
+    df_erc = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/1981/df_erc.pkl')
+    df_erc.reset_index(inplace=True)
+    df_erc['lon'] = df_erc['lon'] + 360
+    df_erc.set_index(['lat','lon'], inplace=True)
+    print('df_erc:\n', df_erc)
+    df_erc_loc = df_erc.loc[(43.0667, 241.4)]
+    print('df_erc_loc:\n', df_erc_loc)
+
+    # Plotting H500 time series:
+    f, ax = plt.subplots(figsize=(9,9))
+    df_loc.plot(x='time', y='H500', ax=ax, c='k')
+    plt.show()
+
+    # Plotting time to identify missing data
+    plt.close()
+    plt.figure()
+    plt.scatter(x=df_loc.index.values, y=df_loc['time'], c='k', edgecolor='k', facecolor='white', s=3)
+    plt.show()
+
+    # Plotting all multi 3D NARR:
+    plt.close()
+    f, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5,1, figsize=(4,10))
+    df_loc.plot(x='time', y='H500', ax=ax1, c='#673a8e')
+    df_loc.plot(x='time', y='TEMP', ax=ax2, c='#adcfd8')
+    df_loc.plot(x='time', y='SPFH', ax=ax3, c='#50844b')
+    df_loc.plot(x='time', y='SPFH RM', ax=ax3, c='#2a4c27')
+    df_loc.plot(x='time', y='CWTR', ax=ax4, c='#821b1b')
+    df_erc_loc.plot(x='time', y='erc', ax=ax5, c='r')
+    plt.subplots_adjust(hspace=0.3)
     plt.savefig('NARR 3D Multi', bbox_inches='tight')
     plt.show()
+
     return
+
 plot_multi_NARR_csv()
+
 
 # ----------------------------------------
 ''' Import all gridMET CSVs '''
-# gridMET_csv_in_dir  = '/home/dp/Documents/FWP/gridMET/csv/'
-# gridMET_pkl_out_dir = '/home/dp/Documents/FWP/gridMET/pickle/'
+# gridMET_csv_in_dir  = '/home/dp/Documents/FWP/gridMET/csv/1982/'
+# gridMET_pkl_out_dir = '/home/dp/Documents/FWP/gridMET/pickle/1982/'
 
 # import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir)
 # ----------------------------------------
