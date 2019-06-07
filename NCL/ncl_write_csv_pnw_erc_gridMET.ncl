@@ -11,7 +11,9 @@
 
 begin
 ;---NetCDF file to read in
-  cdir    = "/home/dp/Documents/FWP/gridMET/"
+  cdir     = "/home/dp/Documents/FWP/gridMET/"
+  cdir_nc  = cdir + "nc/"  ; /FWP/gridMET/nc/
+  cdir_csv = cdir + "csv/" ; /FWP/gridMET/csv/
 
 ;---Select subset
   lat_min =   39
@@ -19,7 +21,7 @@ begin
   lon_min =   -114
   lon_max =   -127
   
-  list_cmd = "cd "+cdir+" ; ls *.nc"
+  list_cmd = "cd "+cdir_nc+" ; ls *.nc"
   print(list_cmd)
   file_list = systemfunc(list_cmd)
   print("file_list(0)="+file_list(0))
@@ -27,7 +29,7 @@ begin
   print("nfiles = " + nfiles)
 
   ;---Loads all files into f
-  f = addfiles(cdir + file_list, "r")
+  f = addfiles(cdir_nc + file_list, "r")
 
   do i = 0, nfiles-1
     print("********** Currently processing "+file_list(i)+" **********")
@@ -95,8 +97,7 @@ begin
       ;print("nc_filename:" + nc_filename)
       nc_suffix = get_file_suffix(nc_filename,0)
       nc_base = nc_suffix@fBase ; nc file basename, e.g. "erc_1979.nc" base is "erc_1979"
-      cdir_csv = cdir + "/csv/" ; /FWP/gridMET/csv
-      csv_filename = cdir_csv + nc_base + "_" + tostring(j) + "_ERC.csv" ; cdir tells it where to put the file
+      csv_filename = cdir_csv + nc_base + "_" + tostring(j) + "_ERC.csv" ; cdir_csv tells it where to put the file
       print("******************** csv_filename:" + csv_filename)
 
       ; Remove current CSV file, make header line, write header to CSV

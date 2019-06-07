@@ -42,11 +42,9 @@ begin
 
     ;-------  Seagate NARR data directories  -------
     
-    ; cdir =   "/mnt/seagate/NARR/3D/temp/"                    ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/flx/temp/"                         ; Seagate  - NARR data - flx - PMSL
-    ; cdir = "/mnt/seagate/NARR/pbl/temp/"                         ; Seagate  - NARR data - pbl - CAPE
-
-    cdir = "/mnt/seagate/NARR/1980/3D/temp/nc/"
+    cdir = "/mnt/seagate/NARR/1981/3D/temp/nc/"                    ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/1981/flx/temp/nc/"                         ; Seagate  - NARR data - flx - PMSL
+    ; cdir = "/mnt/seagate/NARR/1981/pbl/temp/nc/"                         ; Seagate  - NARR data - pbl - CAPE
 
     grib_per_csv = 100   ; Set the number of grib/netCDF files to go into one csv file. Max is 131 due to csv row limitations.
 
@@ -168,16 +166,30 @@ begin
             print("number of csv files made = "+c)
 
             ;---Set csv file name
-            if(c .lt. 10) then
-                ;--- If c is 0 to 9, add a zero prefix
-                ;--- Resulting names will be 01_H500.csv, 02_H500.csv, etc.
-                ;--- Makes sorting the csv files easier in import_NARR_csv()
-                SYNNAME_CSV = tostring(0) + tostring(c) + "_" + SYNABBR + ".csv"
-            else
-                ;--- If c is >= 10, no need to add a zero prefix
-                SYNNAME_CSV = tostring(c) + "_" + SYNABBR + ".csv"
+            if(single) then
+                if(c .lt. 10) then
+                    ;--- If c is 0 to 9, add a zero prefix
+                    ;--- Resulting names will be 01_H500.csv, 02_H500.csv, etc.
+                    ;--- Makes sorting the csv files easier in import_NARR_csv()
+                    SYNNAME_CSV = tostring(0) + tostring(c) + "_" + SYNABBR + ".csv"
+                else
+                    ;--- If c is >= 10, no need to add a zero prefix
+                    SYNNAME_CSV = tostring(c) + "_" + SYNABBR + ".csv"
+                end if
             end if
 
+            if(multi) then
+                if(c .lt. 10) then
+                    ;--- If c is 0 to 9, add a zero prefix
+                    ;--- Resulting names will be 01_H500.csv, 02_H500.csv, etc.
+                    ;--- Makes sorting the csv files easier in import_NARR_csv()
+                    SYNNAME_CSV = tostring(0) + tostring(c) + "_" + "MULTI" + ".csv"
+                else
+                    ;--- If c is >= 10, no need to add a zero prefix
+                    SYNNAME_CSV = tostring(c) + "_" + "MULTI" + ".csv"
+                end if
+            end if
+            
             ;---Add directory to csv file name
             csv_filename = cdir + SYNNAME_CSV
             

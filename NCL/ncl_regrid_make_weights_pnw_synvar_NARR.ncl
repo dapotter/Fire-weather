@@ -45,18 +45,16 @@ begin
 
     ;-------  Seagate NARR data directories  -------
 
-    ; cdir = "/mnt/seagate/NARR/3D/"                          ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/flx/"                         ; Seagate  - NARR data - flx - PMSL
-    ; cdir = "/mnt/seagate/NARR/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
-    ; cdir = "/mnt/seagate/NARR/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
-    cdir = "/mnt/seagate/NARR/1980/3D/temp/"
+    cdir = "/mnt/seagate/NARR/1981/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/1981/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
+    ; cdir = "/mnt/seagate/NARR/1981/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
     
     ; If exporting one or multiple variables to netCDF files:
-    single               = False ; Processing single var...
-    multi                = True  ; or multi var?
+    single               = False     ; Processing single var...
+    multi                = True    ; or multi var?
 
-    SYNVAR               = "HGT_221_ISBL" ; This is always set
-    SYNVAR_2             = "TMP_221_ISBL" ; SYNVAR_2 to SYNVAR_5 only matter if multi = True
+    SYNVAR               = "HGT_221_ISBL"  ; This is always set
+    SYNVAR_2             = "TMP_221_ISBL"  ; SYNVAR_2 to SYNVAR_5 only matter if multi = True
     SYNVAR_3             = "V_VEL_221_ISBL"
     SYNVAR_4             = "SPF_H_221_ISBL"
     SYNVAR_5             = "CLWMR_221_ISBL"
@@ -65,7 +63,7 @@ begin
     ; SYNVAR             = "CAPE_221_SPDY"
 
 
-    lvl         = 500                                  ; arbitrary pressure level for H500
+    lvl                    = 500            ; arbitrary pressure level for H500
 
 
     SYNABBR              = "H500"         ; Geopotential height, gpm
@@ -90,11 +88,6 @@ begin
         SYNVAR_GRAD_Y_UNITS = "gpm/deg"
         SYNVAR_GRAD_X_LONG_NAME = "Geopotential height lon gradient"
         SYNVAR_GRAD_Y_LONG_NAME = "Geopotential height lat gradient"
-    ; elseif(SYNABBR .eq. "SPFH") then
-    ;     SYNVAR_GRAD_X_UNITS = "kg/kg"
-    ;     SYNVAR_GRAD_Y_UNITS = "kg/kg"
-    ;     SYNVAR_GRAD_X_LONG_NAME = "Specific humidity lon gradient"
-    ;     SYNVAR_GRAD_Y_LONG_NAME = "Specific humidity lat gradient"
     elseif(SYNABBR .eq. "PMSL") then
         SYNVAR_GRAD_X_UNITS = "Pa/deg"
         SYNVAR_GRAD_Y_UNITS = "Pa/deg"
