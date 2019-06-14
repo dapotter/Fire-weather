@@ -3,6 +3,9 @@ using RDatasets
 using CSV
 using Dates
 using DelimitedFiles
+# using Plots
+# using PyCall
+# using PyPlot
 
 function fire_weather_som(write_to_csv, plot_every_iter, grid_x, grid_y, step_size, iterations, train_col_count,
                 train_month_name, train_month_num, test_month_name, test_month_num,
@@ -21,8 +24,8 @@ function fire_weather_som(write_to_csv, plot_every_iter, grid_x, grid_y, step_si
     names!(x_test, Symbol.(["h500"]))
     names!(y_train, Symbol.(["ERC"]))
     names!(y_test, Symbol.(["ERC"]))
-    print("x_train:\n", x_train)
-    print("y_train:\n", y_train)
+    print("\nx_train:\n", x_train[1:20,:])
+    print("\ny_train:\n", y_train[1:20,:])
 
     # Initialize (grid_x, grid_y specified in function parameters)
     global som_init_train = initSOM(x_train, grid_x, grid_y)
@@ -88,14 +91,15 @@ function fire_weather_som(write_to_csv, plot_every_iter, grid_x, grid_y, step_si
 
             """ Plotting Class Frequencies every iteration """
             # Train
-            plot_title = "SOM Class Frequencies - Trained - "*train_month_name*", 1979"
+            plot_title = "SOM Class Frequencies - Trained - "*train_month_name
             color_dict = Dict("low"=>"green","moderate"=>"yellowgreen","high"=>"yellow","very high"=>"orange","extreme"=>"red")
-            file_name = SOM_out*"//Timelapse_Trained//"*string(j)*"_"*train_month_num*"_NARR_ERC_SOM_classes_trained_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*train_month_name*".png"
+            file_name = SOM_out*string(j)*"_"*train_month_num*"_NARR_ERC_SOM_classes_trained_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*train_month_name*".png"
+            print(file_name)
             plotClasses(som_trained, freqs_trained, title=plot_title, device=:png, colors=color_dict, fileName=file_name)
             # Test
-            plot_title = "SOM Class Frequencies - Tested - "*test_month_name*", 1979"
+            plot_title = "SOM Class Frequencies - Tested - "*test_month_name
             color_dict = Dict("low"=>"green","moderate"=>"yellowgreen","high"=>"yellow","very high"=>"orange","extreme"=>"red")
-            file_name = SOM_out*"//Timelapse_Tested//"*string(j)*"_"*test_month_num*"_NARR_ERC_SOM_classes_tested_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*test_month_name*".png"
+            file_name = SOM_out*string(j)*"_"*test_month_num*"_NARR_ERC_SOM_classes_tested_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*test_month_name*".png"
             plotClasses(som_tested, freqs_tested, title=plot_title, device=:png, colors=color_dict, fileName=file_name)
 
             j += 1
@@ -117,7 +121,7 @@ function fire_weather_som(write_to_csv, plot_every_iter, grid_x, grid_y, step_si
     """ Plotting Densities """
     f_trained = SOM_out*train_month_num*"_NARR_ERC_SOM_density_trained_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*train_month_name*".png"
     plotDensity(som_trained, device=:png, fileName=f_trained)
-    f_tested = SOM_out*string(test_month_num)*"_NARR_ERC_SOM_density_tested_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*train_month_name*".png"
+    f_tested = SOM_out*test_month_num*"_NARR_ERC_SOM_density_tested_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*train_month_name*".png"
     plotDensity(som_tested, device=:png, fileName=f_tested)
 
     """ Calculating Class Frequencies """
@@ -130,12 +134,12 @@ function fire_weather_som(write_to_csv, plot_every_iter, grid_x, grid_y, step_si
 
     """ Plotting Class Frequencies """
     # Train
-    plot_title = "SOM Class Frequencies - Trained - "*train_month_name*", 1979"
+    plot_title = "SOM Class Frequencies - Trained - "*train_month_name
     color_dict = Dict("low"=>"green","moderate"=>"yellowgreen","high"=>"yellow","very high"=>"orange","extreme"=>"red")
     file_name = SOM_out*train_month_num*"_NARR_ERC_SOM_classes_trained_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*train_month_name*".png"
     plotClasses(som_trained, freqs_trained, title=plot_title, device=:png, colors=color_dict, fileName=file_name)
     # Test
-    plot_title = "SOM Class Frequencies - Tested - "*test_month_name*", 1979"
+    plot_title = "SOM Class Frequencies - Tested - "*test_month_name
     color_dict = Dict("low"=>"green","moderate"=>"yellowgreen","high"=>"yellow","very high"=>"orange","extreme"=>"red")
     file_name = SOM_out*test_month_num*"_NARR_ERC_SOM_classes_tested_"*string(grid_x)*"x"*string(grid_y)*"_"*string(iterations)*"iters_"*string(step_size)*"step_"*test_month_name*".png"
     plotClasses(som_tested, freqs_tested, title=plot_title, device=:png, colors=color_dict, fileName=file_name)
@@ -158,20 +162,20 @@ write_to_csv = true
 plot_every_iter = true
 grid_x = 30
 grid_y = 30
-step_size = 20
+step_size = 100
 iterations = 1000
 train_col_count = 1 # Number of columns to train on (exclude ERC column)
-train_month_name = "June"
-train_month_num =  "6"
-test_month_name =  "June"
-test_month_num =   "6"
-x_train_in =  "//home//dp//Documents//FWP//Julia//x_train_norm.csv"
-x_test_in =   "//home//dp//Documents//FWP//Julia//x_test_norm.csv"
-y_train_in =  "//home//dp//Documents//FWP//Julia//y_train.csv"
-y_test_in =   "//home//dp//Documents//FWP//Julia//y_test.csv"
-xy_train_in = "//home//dp//Documents//FWP//Julia//xy_train_norm.csv"
-xy_test_in =  "//home//dp//Documents//FWP//Julia//xy_test_norm.csv"
-SOM_out =     "//home//dp//Documents//FWP//Julia//SOMs_H500_June_1979//"
+train_month_name = "August"
+train_month_num =  "8"
+test_month_name =  "August"
+test_month_num =   "8"
+x_train_in =  "//home//dp//Documents//FWP//Julia//Training//x_train_norm.csv"
+x_test_in =   "//home//dp//Documents//FWP//Julia//Training//x_test_norm.csv"
+y_train_in =  "//home//dp//Documents//FWP//Julia//Training//y_train.csv"
+y_test_in =   "//home//dp//Documents//FWP//Julia//Training//y_test.csv"
+xy_train_in = "//home//dp//Documents//FWP//Julia//Training//xy_train_norm.csv"
+xy_test_in =  "//home//dp//Documents//FWP//Julia//Training//xy_test_norm.csv"
+SOM_out =     "//home//dp//Documents//FWP//Julia//Training//"
 
 fire_weather_som(write_to_csv, plot_every_iter, grid_x, grid_y, step_size, iterations, train_col_count,
                 train_month_name, train_month_num, test_month_name, test_month_num,
