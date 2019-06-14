@@ -42,12 +42,12 @@ import psycopg2
 
 def fire_weather_db(table):
     # ----------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     # 
     # table:                    Name of table to create in postgres in pgAdmin4:
     #                           'narr', 'narr_erc', or 'narr_erc_categorical'
     #
-    # Script function:          
+    # SCRIPT FUNCTION:          
     #
     # 1)    Copies CSV files (df_NARR.csv, df_NARR_ERC.csv, or 
     #       df_NARR_ERC_categorical) from their directories to
@@ -162,7 +162,7 @@ def fire_weather_db(table):
 
 def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir):
     # ----------------------------------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     #
     # lon_min: subsetting the data to OR and WA
     # lon_max: ""
@@ -195,7 +195,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
     # NARR_pkl_out_dir:     Path where the final dataframe of formatted synoptic variables are exported to
     # 
     #
-    # Script Function:
+    # SCRIPT FUNCTION:
     # 
     # 1)    Read in import_interval number of NARR csv files in rectilinear grid format. All XX_H500.csv
     #       files are stacked, insensitive to the number of columns of data present. Then all XX_PMSL.csv
@@ -206,7 +206,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
     #  
     # 3)    Export all NARR data (df_narr) to csv and pickle files
     #
-    # Note: The reason that it's necessary to modulate the number of csv files imported at once
+    # NOTE: The reason that it's necessary to modulate the number of csv files imported at once
     #       using 'import_interal' is because all csv data is held in RAM, which quickly becomes
     #       overwhelmed when more than 2 csv files are imported if each one has 100 grib files
     #       (roughly 300 hrs = 12.5 days) worth of meteorological data.
@@ -302,9 +302,19 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
             print('concatenated df head:\n', df.head)
             print('concatenated df columns:\n', df.columns)
 
+            # Reordering indices from csv format (time, lon, lat) to time, lat, lon:
             df.reset_index(inplace=True)
             df.set_index(['time','lat','lon'], inplace=True)
             print('df after reset index:\n', df)
+
+            # Converting time to pandas datetime:
+            df.index = df.index.set_levels([pd.to_datetime(df.index.levels[0], format='%m/%d/%Y (%H:%M)'), df.index.levels[1], df.index.levels[2]])
+            # print('df after converting time index to datetime:\n', df)
+
+            # CHECK FOR TEMPORAL INCONTINUITIES:
+            # Checking for gaps in time indicative of NARR file download error:
+            # df_index_diff = df.index.get_level_values(2).diff()
+            # if any element of df_index_diff > 3 hours, throw error and abort
 
             # Storing when H500 data starts and ends. Trying to manage
             # time range disagreements between H500, PMSL and CAPE
@@ -315,7 +325,7 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
                 last_datetime = df.index.get_level_values(2)[-1]
                 last_datetime_list.append(last_datetime)
 
-            # # Resetting index, may not be necessary
+            # Resetting index, may not be necessary
             # df.reset_index(inplace=True)
             # df.set_index('lon', inplace=True)
             # print('df after reset_index:\n', df)
@@ -324,16 +334,19 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
             # Concatenating all H500 csv's together, then all PMSL csv's to it, and so on.
             # df is either all H500 csv's concatenated, or all PMSL csv's, and so on. See
             # the dataframe generator above for how df is created.
-            print('df_narr_partial JUST BEFORE CONCATENATION WITH df:\n', df_narr_partial)
+            print('df_narr_partial PRIOR TO df CONCATENATION:\n', df_narr_partial)
             if i == 0: # First time through loop, append df to columns
                 # When i = 0, all H500 files in df are processed:
                 df_narr_partial = df_narr_partial.append(df)
                 print('First df_narr_partial concatenation:\n', df_narr_partial)
             else: # Concat df to rows of df_narr_partial
-                df_narr_partial = pd.concat((df_narr_partial, df), axis=1, join='inner', sort=False)
-                print('Second df_narr_partial concatenation:\n', df_narr_partial)
-                print('Columns of df_narr_partial concatenation:\n', df_narr_partial.columns)
-            
+                # df_narr_partial = pd.concat((df_narr_partial, df), axis=1, join='inner', sort=False)
+                # print('df_narr_partial concatenation:\n', df_narr_partial)
+                # print('Columns of df_narr_partial concatenation:\n', df_narr_partial.columns)
+                df_narr_partial = df_narr_partial.join(df) # Joins index-on-index, in this case on=['time','lat','lon'], how='left'
+                print('df_narr_partial join:\n', df_narr_partial)
+                print('Columns of df_narr_partial join:\n', df_narr_partial.columns)
+
             arr = df.values
             print(' arr:\n', arr)
             print('np.shape(arr):', np.shape(arr))
@@ -344,14 +357,14 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
 
         # Setting multi-index's time index to datetime. To do this, the index must be recreated.
         # https://stackoverflow.com/questions/45243291/parse-pandas-multiindex-to-datetime
-        # Note that the format provided is the format in the csv file. pd.to_datetime converts
+        # NOTE that the format provided is the format in the csv file. pd.to_datetime converts
         # it to the format it thinks is appropriate.
         # Use if index is lon, lat, time:
         # df_narr_partial.index = df_narr_partial.index.set_levels([df.index.levels[0], df.index.levels[1], pd.to_datetime(df.index.levels[2], format='%m/%d/%Y (%H:%M)')])
         # Use if index is time, lon, lat:
         # df_narr_partial.index = df_narr_partial.index.set_levels([pd.to_datetime(df.index.levels[0], format='%m/%d/%Y (%H:%M)'), df.index.levels[1], df.index.levels[2]])
         # Use if index is time, lat, lon:
-        df_narr_partial.index = df_narr_partial.index.set_levels([pd.to_datetime(df.index.levels[0], format='%m/%d/%Y (%H:%M)'), df.index.levels[1], df.index.levels[2]])
+        # df_narr_partial.index = df_narr_partial.index.set_levels([pd.to_datetime(df.index.levels[0], format='%m/%d/%Y (%H:%M)'), df.index.levels[1], df.index.levels[2]])
 
         # df_narr_partial.reset_index(inplace=True)
         # df_narr_partial.set_index(['lon','lat','time'], inplace=True)
@@ -459,8 +472,8 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
         df_narr = pd.concat((df_narr, df_narr_partial), axis=0)
         print('df_narr:\n', df_narr)
 
-    print('Exporting to CSV... (This could take a minute) ******************************')
-    # IF SHORT ON TIME, YOU MAY NOT WANT TO EXPORT THE ENTIRE 6 GB CSV FILE:
+    # # IF SHORT ON TIME, YOU MAY NOT WANT TO EXPORT THE ENTIRE 6 GB CSV FILE:
+    # print('Exporting to CSV... (This could take a minute) ******************************')
     # df_narr.to_csv(NARR_csv_out_dir + 'df_NARR.csv', index=True, header=True)
 
     # NOTE: Current sample size for Jan 1-14 from SOMPY's point of view is 98 unique maps
@@ -473,13 +486,13 @@ def import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_
 
 def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
     # ----------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     #
     # gridMET_csv_in_dir:       Directory of raw csv gridMET data from gridMET website.
     #
     # gridMET_pkl_out_dir:      Directory to pickle out the gridMET data.
     # 
-    # Script function:
+    # SCRIPT FUNCTION:
     # 
     # 1)    gridMET data exists in csv files for each day of the downloaded year.
     #       This function imports all of those csv files ending in ERC.csv and
@@ -487,7 +500,7 @@ def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
     # 2)    Converts days since Jan 1, 1900 to date format
     # 3)    Exports to df_erc.pkl. No csv export as it's not necessary.
     #
-    # Note: The exported pickle df_erc.pkl will later be imported by merge_NARR_ERC().
+    # NOTE: The exported pickle df_erc.pkl will later be imported by merge_NARR_ERC().
     # ----------------------------------------------------------------------------
 
     # gridMET csv file names must end with ERC.csv:
@@ -516,7 +529,7 @@ def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
 
 def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir):
     # ----------------------------------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     #
     # lon_min: subsetting the data to OR and WA
     # lon_max: ""
@@ -549,7 +562,7 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
     # NARR_pkl_out_dir:     Path where the final dataframe of formatted synoptic variables are exported to
     # 
     #
-    # Script Function:
+    # SCRIPT FUNCTION:
     # 
     # 1)    Read in import_interval number of NARR csv files in rectilinear grid format. All XX_H500.csv
     #       files are stacked, insensitive to the number of columns of data present. Then all XX_PMSL.csv
@@ -560,7 +573,7 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
     #  
     # 3)    Export all NARR data (df_narr) to csv and pickle files
     #
-    # Note: The reason that it's necessary to modulate the number of csv files imported at once
+    # NOTE: The reason that it's necessary to modulate the number of csv files imported at once
     #       using 'import_interal' is because all csv data is held in RAM, which quickly becomes
     #       overwhelmed when more than 2 csv files are imported if each one has 100 grib files
     #       (roughly 300 hrs = 12.5 days) worth of meteorological data.
@@ -575,7 +588,8 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
     # ----------------------------------------------------------------------------------------------------
 
     # NARR csv file names must end with either H500.csv, CAPE.csv, or PMSL.csv:
-    MULTI_files = glob.glob(os.path.join(NARR_csv_in_dir, '*MULTI.csv'))
+    # MULTI_files = glob.glob(os.path.join(NARR_csv_in_dir, '*MULTI.csv'))
+    MULTI_files = glob.glob(os.path.join(NARR_csv_in_dir, '*H500.csv'))
     # PMSL_files = glob.glob(os.path.join(NARR_csv_in_dir, '*PMSL.csv'))
     # CAPE_files = glob.glob(os.path.join(NARR_csv_in_dir, '*CAPE.csv'))
     print('MULTI_files:\n', MULTI_files)
@@ -711,7 +725,7 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
 
         # Setting multi-index's time index to datetime. To do this, the index must be recreated.
         # https://stackoverflow.com/questions/45243291/parse-pandas-multiindex-to-datetime
-        # Note that the format provided is the format in the csv file. pd.to_datetime converts
+        # NOTE that the format provided is the format in the csv file. pd.to_datetime converts
         # it to the format it thinks is appropriate.
         # Use if index is lon, lat, time:
         # df_narr_partial.index = df_narr_partial.index.set_levels([df.index.levels[0], df.index.levels[1], pd.to_datetime(df.index.levels[2], format='%m/%d/%Y (%H:%M)')])
@@ -842,13 +856,13 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
 
 def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
     # ----------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     #
     # gridMET_csv_in_dir:       Directory of raw csv gridMET data from gridMET website.
     #
     # gridMET_pkl_out_dir:      Directory to pickle out the gridMET data.
     # 
-    # Script function:
+    # SCRIPT FUNCTION:
     # 
     # 1)    gridMET data exists in csv files for each day of the downloaded year.
     #       This function imports all of those csv files ending in ERC.csv and
@@ -856,7 +870,7 @@ def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
     # 2)    Converts days since Jan 1, 1900 to date format
     # 3)    Exports to df_erc.pkl. No csv export as it's not necessary.
     #
-    # Note: The exported pickle df_erc.pkl will later be imported by merge_NARR_ERC().
+    # NOTE: The exported pickle df_erc.pkl will later be imported by merge_NARR_ERC().
     # ----------------------------------------------------------------------------
 
     # gridMET csv file names must end with ERC.csv:
@@ -884,9 +898,9 @@ def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
     return
 
 
-def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir):
+def merge_NARR_gridMET(start_date, end_date, multi, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir):
     # ----------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     # 
     # start_date:               Beginning of date range to merge. Can be any date as long as it exists
     #                           in both gridMET (ERC) and NARR pickle files
@@ -903,7 +917,7 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
     # NARR_gridMET_pkl_out_dir: Directory to pickle out the combined NARR-gridMET 24hr resolution
     #                           dataframe
     # 
-    # Script function:
+    # SCRIPT FUNCTION:
     # 
     # 1)    Imports df_erc and df_narr pickle files, converts to dataframes,
     #       sets index of each to time column, aggregates NARR data from 3hrs
@@ -924,8 +938,8 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
     print('df_gridMET:\n', df_gridMET)
 
     # Import NARR synoptic variable data for all of 1979
-    # Note: NARR_pkl_files are all pickle files named 'XX_df_narr.pkl'
-    NARR_pkl_files = glob.glob(os.path.join(NARR_pkl_in_dir, '*_df_narr.pkl'))
+    # NOTE: NARR_pkl_files are all pickle files named 'XX_df_narr_partial.pkl'
+    NARR_pkl_files = glob.glob(os.path.join(NARR_pkl_in_dir, '*_df_narr_partial.pkl'))
     # Sorting the files so they go into the dataframe in the correct order
     NARR_pkl_files = sorted(NARR_pkl_files)
     print('NARR_pkl_files:\n', NARR_pkl_files)
@@ -987,7 +1001,7 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
 
     # Creating time range list of tuples used to select a time range for each
     # NARR grid point and then average the data associated with those grid points.
-    # Note that date_list now starts at day 2.
+    # NOTE that date_list now starts at day 2.
     time_range_list = [(pd.Timestamp(d)-timedelta(hours=3),pd.Timestamp(d)+timedelta(hours=18)) for d in date_list]
     print('time_range_list:\n', time_range_list)
     # ----------------------------------------------------------------------------
@@ -1021,6 +1035,7 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
         # time range start and end
         tr_start = tr[0]
         tr_end = tr[1]
+        print('tr_start is {}, tr_end is {}\n'.format(tr_start, tr_end))
         # lon lat range
 
         D = datetime.date(tr_end) # NARR date associated with gridMET date
@@ -1044,7 +1059,7 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
         # WARNING: It might complain that 233.000 doesn't exist:
         print('df_NARR_time_range.loc[39.0, 233.000]:\n', df_NARR_time_range.loc[39.0,233.000]) # [242.941,42.3137] is very close to Medford, OR
         # ---------------------------------------------------------------------------------
-        print('The script may fail here and complain about no numeric types to aggregate.\nCheck that the end date exists in the last csv file made in import_NARR_csv()')
+        print('* * * * * THE SCRIPT MAY FAIL HERE with the error "no numeric types to aggregate."\nCheck that the end date exists in the last csv file made in import_NARR_csv()')
         df_NARR_time_avg = df_NARR_time_range.groupby(['lat','lon']).mean()
         # print('df_NARR_time_avg before assigning day D to time column:\n', df_NARR_time_avg)
         df_NARR_time_avg['time'] = D
@@ -1255,7 +1270,7 @@ def merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir
     return
 
 
-def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
+def plot_NARR_gridMET(plot_date, multi, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     # -------------------------------------------------------------------
     # This function makes the following:
     # 1)    Contour plot containing tripcolour and tricontourf subplots
@@ -1305,23 +1320,23 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     # print('Shape z_t:\n', np.shape(z_t))
 
     # -------------------------------------------------------------------
-    # # Contour Plots: ERC
-    # plt.close()
-    # f, ax = plt.subplots(1,2, figsize=(8,3), sharex=True, sharey=True)
+    # Contour Plots: ERC
+    plt.close()
+    f, ax = plt.subplots(1,2, figsize=(8,3), sharex=True, sharey=True)
 
-    # ax[0].tripcolor(x_t, y_t, z_t, 30, cmap=cm.jet) # Plots across all timepoints?
-    # ax[0].plot(x_t, y_t, 'ko ', markersize=1)
-    # ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
+    ax[0].tripcolor(x_t, y_t, z_t, 30, cmap=cm.jet) # Plots across all timepoints?
+    ax[0].plot(x_t, y_t, 'ko ', markersize=1)
+    ax[0].set_xlabel('Longitude'); ax[0].set_ylabel('Latitude')
 
-    # tcf = ax[1].tricontourf(x_t, y_t, z_t, 30, cmap=cm.jet) # 20 contour levels is good quality
-    # ax[1].plot(x_t, y_t, 'ko ', markersize=1)
-    # ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
-    # f.colorbar(tcf)
+    tcf = ax[1].tricontourf(x_t, y_t, z_t, 30, cmap=cm.jet) # 20 contour levels is good quality
+    ax[1].plot(x_t, y_t, 'ko ', markersize=1)
+    ax[1].set_xlabel('Longitude'); ax[1].set_ylabel('Latitude')
+    f.colorbar(tcf)
 
-    # date_str = plot_date.strftime('%b %d, %Y')
-    # plt.suptitle('ERC Contour Plots: '+date_str)
-    # plt.savefig('ERC_contour.png', bbox_inches='tight')
-    # plt.show()
+    date_str = plot_date.strftime('%b %d, %Y')
+    plt.suptitle('ERC Contour Plots: '+date_str)
+    plt.savefig('ERC_contour.png', bbox_inches='tight')
+    plt.show()
     # -------------------------------------------------------------------
 
     # Creating a dataframe at one latitude-longitude point across all time points:
@@ -1354,7 +1369,6 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     df_NARR_ERC_lon_lat_time_series_0.reset_index(drop=True, inplace=True)
     df_NARR_ERC_lon_lat_time_series_0['time'] = pd.to_datetime(df_NARR_ERC_lon_lat_time_series_0['time'])
     df_NARR_ERC_lon_lat_time_series_0.set_index('time', inplace=True)
-
     # df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Adj CS']    = pd.Series(df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500']-5500).cumsum(axis=0)
     # df_NARR_ERC_lon_lat_time_series_0.loc[:,'PMSL Adj CS']    = pd.Series(df_NARR_ERC_lon_lat_time_series_0.loc[:,'PMSL']-101325).cumsum(axis=0)
     # df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Grad X CS'] = df_NARR_ERC_lon_lat_time_series_0.loc[:,'H500 Grad X'].cumsum(axis=0)
@@ -1523,8 +1537,6 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     df_NARR_ERC_ts.set_index(['lat','lon','time'], inplace=True)
     df_NARR_ERC_ts.sort_index(level=1, inplace=True)
     print('df_NARR_ERC_ts:\n', df_NARR_ERC_ts)
-
-    return
     # -------------------------------------------------------------------
 
 
@@ -1657,8 +1669,14 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     # -------------------------------------------------------------------
     # H500 average with error shading for all OR locations:
     plt.close()
-    df_location_avgs = df.groupby(['Date'])['H500','H500 SD','H500 Grad X','H500 Grad Y','PMSL','PMSL SD','PMSL Grad X','PMSL Grad Y', 'ERC'].mean().reset_index()
-    df_location_stds = df.groupby(['Date'])['H500','H500 SD','H500 Grad X','H500 Grad Y','PMSL','PMSL SD','PMSL Grad X','PMSL Grad Y', 'ERC'].std().reset_index()
+    if multi == True:
+
+        df_location_avgs = df.groupby(['Date'])['H500','H500 SD','H500 Grad X','H500 Grad Y','PMSL','PMSL SD','PMSL Grad X','PMSL Grad Y', 'PVEL', 'ERC'].mean().reset_index()
+        df_location_stds = df.groupby(['Date'])['H500','H500 SD','H500 Grad X','H500 Grad Y','PMSL','PMSL SD','PMSL Grad X','PMSL Grad Y', 'PVEL', 'ERC'].std().reset_index()
+    else:
+        df_location_avgs = df.groupby(['Date'])['H500','H500 SD','H500 Grad X','H500 Grad Y','PMSL','PMSL SD','PMSL Grad X','PMSL Grad Y', 'ERC'].mean().reset_index()
+        df_location_stds = df.groupby(['Date'])['H500','H500 SD','H500 Grad X','H500 Grad Y','PMSL','PMSL SD','PMSL Grad X','PMSL Grad Y', 'ERC'].std().reset_index()
+
     # Converts all columns to numeric. It ignores any columns that can't be converted.
     df_location_avgs.apply(pd.to_numeric, errors='ignore')
     df_location_stds.apply(pd.to_numeric, errors='ignore')
@@ -1701,6 +1719,42 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     ax8.tick_params('y', colors='r')
     ax8.legend(labels=['ERC'], loc='upper right')
     plt.savefig('NARR_H500_SD_ERC_Time_Series__OR__1979.png', bbox_inches='tight')
+
+
+    if multi == True:
+        # H500 Grad X and PVEL:
+        # f, (ax1,ax3)= plt.subplots(1,2, figsize=(4,4))
+        ax13 = df_location_avgs.plot(x='Date', y='H500 Grad X', color='#5170a0')
+        ax13.fill_between(df_location_avgs['Date'].dt.to_pydatetime(), df_location_avgs['H500 Grad X']-df_location_stds['H500 Grad X'], df_location_avgs['H500 Grad X']+df_location_stds['H500 Grad X'], color='#5170a0', alpha=0.35)
+        ax14 = ax13.twinx()
+        df_location_avgs.plot(x='Date', y='PVEL', ax=ax14, alpha=0.4, color='#c9440c')
+        ax14.fill_between(df_location_avgs['Date'].dt.to_pydatetime(), df_location_avgs['PVEL']-df_location_stds['PVEL'], df_location_avgs['PVEL']+df_location_stds['PVEL'], color='#c9440c', alpha=0.35)
+
+        ax13.set_ylabel('H500 Grad X', color='#5170a0')
+        ax13.tick_params('y', colors='#5170a0')
+        ax13.legend(labels=['H500 Grad X'], loc='upper left')
+
+        ax14.set_ylabel('PVEL', color='#c9440c')
+        ax14.tick_params('y', colors='#c9440c')
+        ax14.legend(labels=['PVEL'], loc='upper right')
+        plt.savefig('NARR_H500_Grad_X_PVEL_Time_Series__OR__1979.png', bbox_inches='tight')
+
+        # H500 Grad Y and PVEL:
+        # f, (ax1,ax3)= plt.subplots(1,2, figsize=(4,4))
+        ax15 = df_location_avgs.plot(x='Date', y='H500 Grad Y', color='#5170a0')
+        ax15.fill_between(df_location_avgs['Date'].dt.to_pydatetime(), df_location_avgs['H500 Grad Y']-df_location_stds['H500 Grad Y'], df_location_avgs['H500 Grad Y']+df_location_stds['H500 Grad Y'], color='#5170a0', alpha=0.35)
+        ax16 = ax15.twinx()
+        df_location_avgs.plot(x='Date', y='PVEL', ax=ax16, alpha=0.4, color='#c9440c')
+        ax16.fill_between(df_location_avgs['Date'].dt.to_pydatetime(), df_location_avgs['PVEL']-df_location_stds['PVEL'], df_location_avgs['PVEL']+df_location_stds['PVEL'], color='#c9440c', alpha=0.35)
+
+        ax15.set_ylabel('H500 Grad Y', color='#5170a0')
+        ax15.tick_params('y', colors='#5170a0')
+        ax15.legend(labels=['H500 Grad Y'], loc='upper left')
+
+        ax16.set_ylabel('PVEL', color='#c9440c')
+        ax16.tick_params('y', colors='#c9440c')
+        ax16.legend(labels=['PVEL'], loc='upper right')
+        plt.savefig('NARR_H500_Grad_Y_PVEL_Time_Series__OR__1979.png', bbox_inches='tight')
 
 
     # PMSL:
@@ -2077,13 +2131,420 @@ def plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir):
     return
 
 
+def build_monthly_NARR_gridMET(ARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir):
+    # ----------------------------------------------------------------------------
+    # NOTE: After running merge_NARR_gridMET(), go into /FWP/NARR_gridMET/, pull out
+    #       all df_NARR_ERC_categorical.pkl files from their year folders,
+    #       rename to df_NARR_ERC_categorical_1979.pkl, etc for every year, and put
+    #       into /FWP/NARR_gridMET/. Then run this function to merge all years'
+    #       January data into one df and export as csv files. It will do this
+    #       for every month of the year. It will also combine all years' data
+    #       into one giant csv file.
+    #
+    # PARAMETERS:
+    #
+    # NARR_gridMET_pkl_in_dir:      Directory of pickle NARR-gridMET directories
+    #                               containing each year of dat.
+    # 
+    # SCRIPT FUNCTION:
+    # 
+    # 1)    NARR-gridMET data exists in the directory /FWP/NARR_gridMET.
+    #       This function imports all pickle files ending in *YEAR.pkl and
+    #       joins them into df_NARR_gridMET_all_years containing every year
+    #       of NARR-gridMET data (this dataset can be massive).
+    #
+    # 2)    If any of the superfluous columns are present: TEMP, SPFH, TEMP, or
+    #       CWTR, they are dropped.
+    #
+    # 3)    df_NARR_gridMET_all_years is used to create dataframes for each month
+    #       of the year across all years:
+    #           df_NARR_gridMET_1
+    #           df_NARR_gridMET_2
+    #                   ...
+    #           df_NARR_gridMET_11
+    #           df_NARR_gridMET_12
+    #       If the imported years run from 1979 to 1983, then df_NARR_gridMET_Aug
+    #       will be data from every august of 1979 through 1983 (4 months of data total)
+    #       This is used to train the SOM on August only.
+    #           
+    # 4)    Exports to the same directory they were imported from and is placed in:
+    #           /Training/Categorical or,
+    #           /Training/Continuous
+    #       depending on whether the ERC data is in categorical or continuous format.
+    #       Exports in csv format only at the moment.
+    #
+    # NOTE: The exported csv df_NARR_gridMET_8 (for August) will then be imported by Julia.
+    # NOTE: The exported pickle files are for backup purposes and to import for
+    #       processing in Python if necessary.
+    # ----------------------------------------------------------------------------
+
+    # Import NARR-gridMET data for all years
+    # NOTE: NARR_pkl_files are all pickle files named 'df_NARR_ERC_XXXX.pkl' (XXXX = year)
+    continuous_path = NARR_gridMET_pkl_in_dir + 'Continuous/'
+    categorical_path = NARR_gridMET_pkl_in_dir + 'Categorical/'
+
+    NARR_gridMET_cont_pkl_files = glob.glob(os.path.join(continuous_path, '*.pkl'))
+    NARR_gridMET_cat_pkl_files = glob.glob(os.path.join(categorical_path, '*.pkl'))
+
+    # Sorting the files so they go into the dataframe in the correct order
+    NARR_gridMET_cont_pkl_files = sorted(NARR_gridMET_cont_pkl_files)
+    NARR_gridMET_cat_pkl_files = sorted(NARR_gridMET_cat_pkl_files)
+    print('NARR_gridMET_cont_pkl_files:\n', NARR_gridMET_cont_pkl_files)
+    print('NARR_gridMET_cat_pkl_files:\n', NARR_gridMET_cat_pkl_files)
+
+    # Read in each year's pickle file and put them into one dataframe:
+    df_cont = (pd.read_pickle(file) for file in NARR_gridMET_cont_pkl_files)
+    df_cat = (pd.read_pickle(file) for file in NARR_gridMET_cat_pkl_files)
+    df_NARR_gridMET_cont_all_years = pd.concat(df_cont, axis=0)
+    df_NARR_gridMET_cat_all_years = pd.concat(df_cat, axis=0)
+    print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years); print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
+    
+    # Drop superfluous columns:
+    df_NARR_gridMET_cont_all_years.drop(['TEMP','SPFH','PVEL','CWTR'], axis=1, inplace=True)
+    df_NARR_gridMET_cat_all_years.drop(['TEMP','SPFH','PVEL','CWTR'], axis=1, inplace=True) 
+    print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years)
+    print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
+    df_NARR_gridMET_cont_all_years.set_index(['lat','lon'], inplace=True)
+    df_NARR_gridMET_cat_all_years.set_index(['lat','lon'], inplace=True)
+
+    # Get one location for plotting:
+    df_NARR_gridMET_cont_all_years = df_NARR_gridMET_cont_all_years.loc[(42.0588, 236.0590)]
+    df_NARR_gridMET_cont_all_years['time'] = pd.to_datetime(df_NARR_gridMET_cont_all_years['time'])
+
+    # plt.figure()
+    # plt.plot(df_NARR_gridMET_all_years_loc['time'], df_NARR_gridMET_all_years_loc['H500'])
+    # plt.show()
+
+    # plt.figure()
+    # plt.plot(df_NARR_gridMET_all_years_loc['time'], df_NARR_gridMET_all_years_loc['ERC'])
+    # plt.show()
+
+    # Create month column containing month number (1 for January, etc)
+    df_NARR_gridMET_cont_all_years['month'] = df_NARR_gridMET_cont_all_years['time'].dt.month
+    df_NARR_gridMET_cat_all_years['month'] = df_NARR_gridMET_cat_all_years['time'].dt.month
+    print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years)
+    print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
+
+    # Export directories for continuous and categorical data
+    continuous_export_dir = NARR_gridMET_csv_out_dir + 'Continuous/'
+    categorical_export_dir = NARR_gridMET_csv_out_dir + 'Categorical/'
+    print('continuous_export_dir:\n', continuous_export_dir)
+    print('categorical_export_dir:\n', categorical_export_dir)
+
+
+    # EXPORT ALL YEARS' DATA TO ONE CSV:
+    continuous_export_file = continuous_export_dir+'df_NARR_gridMET_all_years.csv'
+    categorical_export_file = categorical_export_dir+'df_NARR_gridMET_categorical_all_years.csv'
+    print('Exporting to csv the continuous and categorical data for all years. This could take a few minutes...')
+    df_NARR_gridMET_cont_all_years.to_csv(continuous_export_file, index=True, header=True)
+    df_NARR_gridMET_cat_all_years.to_csv(categorical_export_file, index=True, header=True)
+
+
+    # EXPORT EACH MONTH TO INDIVIDUAL CSVs:
+    # Iterate through month numbers 1 through 12 
+    for month in range(1,13):
+        print('month:\n', month)
+        # Get one month for all years of data:
+        df_NARR_gridMET_cont_month = df_NARR_gridMET_cont_all_years.loc[df_NARR_gridMET_cont_all_years['month']==month]
+        df_NARR_gridMET_cat_month = df_NARR_gridMET_cat_all_years.loc[df_NARR_gridMET_cat_all_years['month']==month]
+        # print('df_NARR_gridMET_cont_month:\n', df_NARR_gridMET_cont_month)
+        print('Exporting month {} to csv:\n'.format(month))
+        # Export directories with file names:
+        continuous_export_file = continuous_export_dir+'df_NARR_gridMET_'+str(month)+'.csv'
+        categorical_export_file = categorical_export_dir+'df_NARR_gridMET_categorical_'+str(month)+'.csv'
+        # Export as csv:
+        df_NARR_gridMET_cont_month.to_csv(continuous_export_file, index=True, header=True)
+        df_NARR_gridMET_cat_month.to_csv(categorical_export_file, index=True, header=True)
+    return
+
+
+
+# ----------------------------------------------- EXPORTING TO R & JULIA: -----------------------------------------------
+
+
+def export_NARR_ERC_categorical__R_Julia(month_num, cols, NARR_gridMET_csv_in_dir, NARR_gridMET_csv_out_dir):
+    # ----------------------------------------------------------------------------
+    # NOTE: After running build_monthly_NARR_gridMET(), this function imports
+    #       df_NARR_ERC_categorical.csv from FWP/NARR_gridMET/ and processes it
+    #       for export to csv format for SOM training in R and Julia.
+    #       This needs to be run for the month of the year for which you want to
+    #       train the SOM.
+    #
+    # PARAMETERS:
+    #
+    #       month_num:                  8 is August
+    #
+    #       cols:                       Columns you want in the final csv
+    #                                   files, e.g. cols = ['H500', 'ERC']
+    #
+    #       NARR_gridMET_csv_in_dir:    Directory of NARR-gridMET csv data
+    #                                   containing all years worth of data
+    #       
+    #       NARR_gridMET_csv_out_dir:   csv output directory
+    # 
+    # SCRIPT FUNCTION:
+    # 
+    # 1)    NARR-gridMET data exists in the directory /FWP/NARR_gridMET.
+    #       This function imports df_NARR_ERC_categorical.csv
+    #
+    # 2)    It iterates through a for loop to use the same naming conventions
+    #       for making all_years data and monthly data
+    #
+    # 3)    Exports as csv files to R and Julia specific folders
+    #
+    # 4)    Normalizes and scales the data into x_train, y_train, x_test,
+    #       y_test, xy_train, xy_test, etc and exports to Julia specific
+    #       folder for SOM training.
+    # ----------------------------------------------------------------------------
+
+    # Using this loop allows for one naming convention, thus half the code
+    format_types = ['all_years','monthly']
+    for ft in format_types: # Either 'all_years' or 'monthly'
+        
+        # categorical_import_file example:
+        # '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/df_NARR_gridMET_categorical_all_years.csv'
+        # '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/df_NARR_gridMET_categorical_8.csv'
+        if ft == 'all_years':
+            categorical_import_file   = NARR_gridMET_csv_in_dir + 'df_NARR_gridMET_categorical_' + ft + '.csv'
+        else:
+            categorical_import_file   = NARR_gridMET_csv_in_dir + 'df_NARR_gridMET_categorical_' + str(month_num) + '.csv'
+        
+        # Ouput directories for R Training and Julia Training:
+        csv_out_R     = NARR_gridMET_csv_out_dir + 'R/Training/'
+        csv_out_Julia = NARR_gridMET_csv_out_dir + 'Julia/Training/'
+
+        # Importing either all years of data or one month's data across all years:
+        df = pd.read_csv(categorical_import_file, header='infer')
+        print('df:\n', df)
+
+        # Grab columns of interest:
+        # cols = ['time','H500 Grad X', 'H500 Grad Y', 'PMSL Grad X', 'PMSL Grad Y', 'ERC']
+        df = df[cols]
+        
+        # Removing invalid ERC value rows:
+        invalid_mask = (df['ERC'] != 'invalid') # monthly
+        df = df.loc[ invalid_mask ]             # removing invalid ERC
+
+        """
+        Export unnormalized, unscaled data to R and Julia folder for training runs. NOTE that
+        R does the normalization and scaling itself. Julia's SOM.jl does the normalization and
+        scaling as well but I've written fire_weather_som.jl to use xy_train.csv and xy_test.csv,
+        so it won't be expecting 'data_all_years.csv' or 'data_monthly.csv'
+        """
+
+        if ft == 'all_years':
+            df.to_csv(csv_out_R + 'data_all_years.csv', index=False)
+            df.to_csv(csv_out_Julia + 'data_all_years.csv', index=False)
+        else:
+            df.to_csv(csv_out_R + 'data_monthly.csv', index=False)
+            df.to_csv(csv_out_Julia + 'data_monthly.csv', index=False)
+
+        """
+        Beyond this point, creating a scaled and normalized train-test split
+        is done for export to Julia. The dataframes as they stand at this point
+        are exported just before this text.
+        """
+
+        # Make normalized and scaled data for Julia
+        if ft == 'monthly':
+            # Creating class weights (the weights aren't used anywhere, just using ):
+            from sklearn.utils import class_weight
+            erc_class_weights = class_weight.compute_class_weight(class_weight='balanced', classes=np.unique(df['ERC']), y=df['ERC'])
+            print('erc_class_weights:\n', erc_class_weights)
+
+            # --------------------------------------
+            # Determining class imablance:
+            classes = np.unique(df['ERC']) # Identify unique classes
+            # print('classes:\n', classes)
+            num_samples = len(df.index)
+            # Loop through each class, count occurrences, compute class frequency:
+            for c in classes:
+                class_count = df.ERC.str.count(c).sum()
+                # print('class_count:\n', class_count)
+                class_freq =  round(class_count / num_samples * 100)
+                print('{} class frequency = {}'.format(c, class_freq))
+
+            # Another way of calculating class frequencies using collections.Counter:
+            from collections import Counter
+            counter = Counter(df['ERC']) # creates a dictionary {'extreme': 167448, 'very high': 31114, 'high': 20670, 'moderate': 12749, 'low': 6099}
+            # print('counter:\n', counter)
+            class_sums = sum(counter.values()) # sums all values of the dictionary
+            class_freqs = {key:round(val / class_sums * 100) for key, val in counter.items()} # calculates class frequencies from the dictionary's items
+            print('Class frequencies using collections.Counter:\n', class_freqs)
+            # --------------------------------------
+
+            # Scaling:
+            x = df[cols[0:-1]] # Getting first column H500, avoiding last column ERC
+            y = df[['ERC']]
+            x_train, x_test, y_train, y_test = train_test_split(x, y , train_size=0.7, random_state=90)
+            print('x_train:\n', x_train)
+            print('y_train:\n', y_train)
+
+            # Normalize Training Data (std_scale is used on train and test data)
+            std_scale = preprocessing.StandardScaler().fit(x_train)
+            
+            # What is transforming doing? x_train_norm is a numpy array
+            x_train_norm = std_scale.transform(x_train)
+            
+            #Converting numpy array to dataframe
+            x_train_norm = pd.DataFrame(x_train_norm, index=x_train.index, columns=x_train.columns)
+
+            # Normalize Testing Data by using mean and SD of training set
+            x_test_norm = std_scale.transform(x_test) # x_test_norm is a numpy array
+            x_test_norm = pd.DataFrame(x_test_norm, index=x_test.index, columns=x_test.columns)
+
+            # Joining auto-aligns on the left df's index:
+            xy_train = x_train.join(y_train)
+            xy_test = x_test.join(y_test)
+
+            # Sorting but not necessary:
+            # xy_train.sort_index(inplace=True)
+            # xy_test.sort_index(inplace=True)
+            # print('xy_train joined:\n', xy_train.head())
+            # print('xy_test joined:\n', xy_test.head())
+
+            # Normalizing:
+            xy_train_norm = x_train_norm.join(y_train)
+            xy_test_norm = x_test_norm.join(y_test)
+
+    # --------------------------------------
+    # Not using this at the moment because R is doing its own
+    # normalization and scaling:
+    # x_train.to_csv(csv_out_R + 'x_train.csv', index=False)
+    # x_test.to_csv(csv_out_R + 'x_test.csv', index=False)
+    # y_train.to_csv(csv_out_R + 'y_train.csv', index=False)
+    # y_test.to_csv(csv_out_R + 'y_test.csv', index=False)
+    # xy_train.to_csv(csv_out_R + 'xy_train.csv', index=False)
+    # xy_test.to_csv(csv_out_R + 'xy_test.csv', index=False)
+    # x_train_norm.to_csv(csv_out_R + 'x_train_norm.csv', index=False)
+    # x_test_norm.to_csv(csv_out_R + 'x_test_norm.csv', index=False)
+    # xy_train_norm.to_csv(csv_out_R + 'xy_train_norm.csv', index=False)
+    # xy_test_norm.to_csv(csv_out_R + 'xy_test_norm.csv', index=False)
+
+    # Export to Julia folder
+    x_train.to_csv(csv_out_Julia + 'x_train.csv', index=False)
+    x_test.to_csv(csv_out_Julia + 'x_test.csv', index=False)
+    y_train.to_csv(csv_out_Julia + 'y_train.csv', index=False)
+    y_test.to_csv(csv_out_Julia + 'y_test.csv', index=False)
+    xy_train.to_csv(csv_out_Julia + 'xy_train.csv', index=False)
+    xy_test.to_csv(csv_out_Julia + 'xy_test.csv', index=False)
+    x_train_norm.to_csv(csv_out_Julia + 'x_train_norm.csv', index=False)
+    x_test_norm.to_csv(csv_out_Julia + 'x_test_norm.csv', index=False)
+    xy_train_norm.to_csv(csv_out_Julia + 'xy_train_norm.csv', index=False)
+    xy_test_norm.to_csv(csv_out_Julia + 'xy_test_norm.csv', index=False)
+
+    return
+
+
+
+# This function imports df_NARR_ERC_categorical.csv for a particular year 
+# and processes it for export to csv format for SOM training in R and Julia:
+def export_NARR_ERC_one_year__R_Julia():
+    # Exporting gradients and ERC to csv:
+    df = pd.read_csv('/home/dp/Documents/FWP/NARR_gridMET/csv/1979/df_NARR_ERC_categorical.csv', header='infer')
+    print('df:\n', df)
+    # cols = ['time','H500 Grad X', 'H500 Grad Y', 'PMSL Grad X', 'PMSL Grad Y', 'ERC']
+    cols = ['time','H500', 'ERC'] # Selecting the desired columns
+    start_date_str = '1979-06-01'
+    # end_date_str =   '1979-08-31'
+    end_date_str =   '1979-06-30'
+    # export_filename = 'NARR_ERC_June_thru_August_1979_gradients_categorical.csv'
+    export_filename = 'NARR_ERC_June_1979_h500_only_categorical.csv'
+
+    df = df[cols]
+    invalid_mask = (df['ERC'] != 'invalid')
+    print('invalid_mask:\n', invalid_mask)
+    df = df.loc[ invalid_mask ]   # removing invalid ERC
+    df['time'] = pd.to_datetime(df['time'])                 # convert time column to datetime
+    df.set_index('time', inplace=True)                                # set time column to index
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()             # specify start and end dates
+    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    df = df.loc[[start_date,end_date]]                 # get data from date range
+    df.reset_index(drop=True, inplace=True) # Don't need time index anymore
+
+    # Scaling:
+    x = df[cols[1:-1]] # cols[1,-1] avoids first time column and last ERC column
+    y = df[['ERC']]
+    x_train, x_test, y_train, y_test = train_test_split(x, y , train_size=0.7, random_state=90)
+    print('x_train:\n', x_train)
+    print('y_train:\n', y_train)
+
+    # Normalize Training Data (std_scale is used on train and test data)
+    std_scale = preprocessing.StandardScaler().fit(x_train)
+    
+    x_train_norm = std_scale.transform(x_train) # x_train_norm is a numpy array
+    #Converting numpy array to dataframe
+    x_train_norm = pd.DataFrame(x_train_norm, index=x_train.index, columns=x_train.columns) 
+
+
+    # Normalize Testing Data by using mean and SD of training set
+    x_test_norm = std_scale.transform(x_test) # x_test_norm is a numpy array
+    x_test_norm = pd.DataFrame(x_test_norm, index=x_test.index, columns=x_test.columns)
+
+    # WARNING: NOT USING ANY AXIS ALIGNMENT. THIS WORKS BUT MAY NOT BE GOOD PRACTICE.
+    xy_train = pd.concat((x_train, y_train), axis=1)
+    xy_test = pd.concat((x_test, y_test), axis=1)
+    xy_train_norm = pd.concat((x_train_norm, y_train), axis=1)
+    xy_test_norm = pd.concat((x_test_norm, y_test), axis=1)
+
+    # NOTE: THE EXPORT FILENAMES ARE GENERIC. SHOULD FIND A MORE SUITABLE NAME.
+    # Export to R folder
+    x_train.to_csv(csv_out_R + 'x_train.csv', index=False)
+    x_test.to_csv(csv_out_R + 'x_test.csv', index=False)
+    y_train.to_csv(csv_out_R + 'y_train.csv', index=False)
+    y_test.to_csv(csv_out_R + 'y_test.csv', index=False)
+    xy_train.to_csv(csv_out_R + 'xy_train.csv', index=False)
+    xy_test.to_csv(csv_out_R + 'xy_test.csv', index=False)
+    x_train_norm.to_csv(csv_out_R + 'x_train_norm.csv', index=False)
+    x_test_norm.to_csv(csv_out_R + 'x_test_norm.csv', index=False)
+    xy_train_norm.to_csv(csv_out_R + 'xy_train_norm.csv', index=False)
+    xy_test_norm.to_csv(csv_out_R + 'xy_test_norm.csv', index=False)
+
+    # Export to Julia folder
+    x_train.to_csv(csv_out_Julia + 'x_train.csv', index=False)
+    x_test.to_csv(csv_out_Julia + 'x_test.csv', index=False)
+    y_train.to_csv(csv_out_Julia + 'y_train.csv', index=False)
+    y_test.to_csv(csv_out_Julia + 'y_test.csv', index=False)
+    xy_train.to_csv(csv_out_Julia + 'xy_train.csv', index=False)
+    xy_test.to_csv(csv_out_Julia + 'xy_test.csv', index=False)
+    x_train_norm.to_csv(csv_out_Julia + 'x_train_norm.csv', index=False)
+    x_test_norm.to_csv(csv_out_Julia + 'x_test_norm.csv', index=False)
+    xy_train_norm.to_csv(csv_out_Julia + 'xy_train_norm.csv', index=False)
+    xy_test_norm.to_csv(csv_out_Julia + 'xy_test_norm.csv', index=False)
+
+    return
+
+
+
+
+
+def plot_SOM_results__R():
+    changes100 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_100iters.csv', header=0, delim_whitespace=True)
+    changes200 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_200iters.csv', header=0, delim_whitespace=True)
+    changes400 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_400iters.csv', header=0, delim_whitespace=True)
+    changes800 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_800iters.csv', header=0, delim_whitespace=True)
+    changes1600 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_1600iters.csv', header=0, delim_whitespace=True)
+    changes2200 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_2200iters.csv', header=0, delim_whitespace=True)
+    changes4400 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_4400iters.csv', header=0, delim_whitespace=True)
+    # changes8800 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_8800iters.csv', header=0, delim_whitespace=True)
+
+    df = pd.DataFrame([])
+    df = pd.concat((changes100, changes200, changes400, changes800, changes1600, changes2200, changes4400), axis=1, ignore_index=True)
+    df.columns = ['100','200','400','800','1600','2200','4400']
+    
+    df.plot(y=['100','200','400','800','1600','2200','4400'], kind='line')
+    plt.show()
+
+    return
+
+
 def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
     # ----------------------------------------------------------------------------
-    # Parameters:
+    # PARAMETERS:
     #
     #
     #
-    # Script Function:
+    # SCRIPT FUNCTION:
     #
     # Import pickle file, export as csv for SOM training in Julia:
     # ----------------------------------------------------------------------------
@@ -2098,7 +2559,7 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
     print('Imported pickle as df:\n', df.head())
     # Export df as csv:
     df.to_csv(csv_dir, index=True, header=True) # Includes index columns, names all columns at top of file
-    
+
     return
 
 
@@ -2110,6 +2571,7 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # ----------------------------------------
 
 
+
 # ----------------------------------------
 ''' Import NARR data (rectilinear grid) '''
 # lon_min = 235
@@ -2118,122 +2580,62 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # lat_max = 50
 # import_interval = 2
 # export_interval = 10
-# multi = True
-# NARR_csv_in_dir  = '/home/dp/Documents/FWP/NARR/csv/1980/'  #'/mnt/seagate/NARR/3D/temp/csv/'  # '/home/dp/Documents/FWP/NARR/csv_exp/rectilinear_grid/'
-# NARR_csv_out_dir = '/home/dp/Documents/FWP/NARR/csv/1980/'     # Used in Postgres
-# NARR_pkl_out_dir = '/home/dp/Documents/FWP/NARR/pickle/1980/'     #'/home/dp/Documents/FWP/NARR/pickle_exp/rectilinear_grid/'
+# multi = False
+# NARR_csv_in_dir  = '/home/dp/Documents/FWP/NARR/csv/1983/'  #'/mnt/seagate/NARR/3D/temp/csv/'  # '/home/dp/Documents/FWP/NARR/csv_exp/rectilinear_grid/'
+# NARR_csv_out_dir = '/home/dp/Documents/FWP/NARR/csv/1983/'     # Used in Postgres
+# NARR_pkl_out_dir = '/home/dp/Documents/FWP/NARR/pickle/1983/'     #'/home/dp/Documents/FWP/NARR/pickle_exp/rectilinear_grid/'
 
 # import_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir)
 # ----------------------------------------
 
 
-# ----------------------------------------
-''' Import Multi 3D NARR data (rectilinear grid) '''
-# lon_min = 235
-# lat_min = 244
-# lon_max = 41
-# lat_max = 50
-# import_interval = 2
-# export_interval = 10
-# multi = True
-# NARR_csv_in_dir  = '/home/dp/Documents/FWP/NARR/csv/1981/'  #'/mnt/seagate/NARR/3D/temp/csv/'  # '/home/dp/Documents/FWP/NARR/csv_exp/rectilinear_grid/'
-# NARR_csv_out_dir = '/home/dp/Documents/FWP/NARR/csv/1981/'     # Used in Postgres
-# NARR_pkl_out_dir = '/home/dp/Documents/FWP/NARR/pickle/1981/'     #'/home/dp/Documents/FWP/NARR/pickle_exp/rectilinear_grid/'
-
-# import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir)
-# ----------------------------------------
-
-
-def plot_multi_NARR_csv():
-    # IMPORT NARR MULTI 3D:
-    # df = pd.read_csv('/home/dp/Documents/FWP/NARR/csv/1980/df_MULTI.csv', header='infer', index_col=None)
-    df = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/1981/df_MULTI.pkl')
-    df.reset_index(inplace=True)
-    df.set_index(['lat','lon'], inplace=True)
-    print('df:\n', df)
-
-    df_loc = df.loc[[(43.0784,241.412)]]# 39.0, 233.000)]]
-    df.reset_index(inplace=True)
-    df_loc['SPFH RM'] = df_loc['SPFH'].rolling(30).mean()
-    print('df_loc[[SPFH, SPFH RM]]:\n', df_loc[['SPFH', 'SPFH RM']])
-
-    df_loc.reset_index(inplace=True)
-    df_loc.set_index('time', inplace=True)
-    # df_loc_fall = df_loc.loc['1981-09-15':'1981-11-15']
-    # print('df_loc_fall:\n', df_loc_fall.to_string())
-
-    df_loc.reset_index(inplace=True)
-    df.set_index(['lat','lon'], inplace=True)
-
-    # IMPORT ERC:
-    df_erc = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/1981/df_erc.pkl')
-    df_erc.reset_index(inplace=True)
-    df_erc['lon'] = df_erc['lon'] + 360
-    df_erc.set_index(['lat','lon'], inplace=True)
-    print('df_erc:\n', df_erc)
-    df_erc_loc = df_erc.loc[(43.0667, 241.4)]
-    print('df_erc_loc:\n', df_erc_loc)
-
-    # Plotting H500 time series:
-    f, ax = plt.subplots(figsize=(9,9))
-    df_loc.plot(x='time', y='H500', ax=ax, c='k')
-    plt.show()
-
-    # Plotting time to identify missing data
-    plt.close()
-    plt.figure()
-    plt.scatter(x=df_loc.index.values, y=df_loc['time'], c='k', edgecolor='k', facecolor='white', s=3)
-    plt.show()
-
-    # Plotting all multi 3D NARR:
-    plt.close()
-    f, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5,1, figsize=(4,10))
-    df_loc.plot(x='time', y='H500', ax=ax1, c='#673a8e')
-    df_loc.plot(x='time', y='TEMP', ax=ax2, c='#adcfd8')
-    df_loc.plot(x='time', y='SPFH', ax=ax3, c='#50844b')
-    df_loc.plot(x='time', y='SPFH RM', ax=ax3, c='#2a4c27')
-    df_loc.plot(x='time', y='CWTR', ax=ax4, c='#821b1b')
-    df_erc_loc.plot(x='time', y='erc', ax=ax5, c='r')
-    plt.subplots_adjust(hspace=0.3)
-    plt.savefig('NARR 3D Multi', bbox_inches='tight')
-    plt.show()
-
-    return
-
-plot_multi_NARR_csv()
-
 
 # ----------------------------------------
 ''' Import all gridMET CSVs '''
-# gridMET_csv_in_dir  = '/home/dp/Documents/FWP/gridMET/csv/1982/'
-# gridMET_pkl_out_dir = '/home/dp/Documents/FWP/gridMET/pickle/1982/'
+# gridMET_csv_in_dir  = '/home/dp/Documents/FWP/gridMET/csv/1981/'
+# gridMET_pkl_out_dir = '/home/dp/Documents/FWP/gridMET/pickle/1981/'
 
 # import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir)
 # ----------------------------------------
 
 
+
 # ----------------------------------------
 # ''' Merge NARR and gridMET '''
-# start_date               = '1979,1,1'
-# end_date                 = '1979,12,31'
-# gridMET_pkl_in_dir       = '/home/dp/Documents/FWP/gridMET/pickle/'
-# NARR_pkl_in_dir          = '/home/dp/Documents/FWP/NARR/pickle/'       # '/home/dp/Documents/FWP/NARR/pickle/'
-# NARR_gridMET_pkl_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
-# NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/'
+# start_date               = '1983,1,1'
+# end_date                 = '1983,12,31'
+# multi                    = False    # 1980 and 1981 set to True, all other years set False
+# gridMET_pkl_in_dir       = '/home/dp/Documents/FWP/gridMET/pickle/1983/'
+# NARR_pkl_in_dir          = '/home/dp/Documents/FWP/NARR/pickle/1983/'       # '/home/dp/Documents/FWP/NARR/pickle/'
+# NARR_gridMET_pkl_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/1983/'
+# NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/1983/'
 
-# merge_NARR_gridMET(start_date, end_date, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
+# merge_NARR_gridMET(start_date, end_date, multi, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
 # ----------------------------------------
+
 
 
 # ----------------------------------------
 ''' Plot NARR and gridMET data '''
-# plot_date               = '1979,08,10'
+# plot_date               = '1983,08,10'
+# multi                   = False
 # plot_lat                = (42.0588,  42.0588,  44.6078,  42.3137,  47.4118,  47.4118,  48.4314,  48.9412) # First four: OR. Last four: WA
 # plot_lon                = (236.0590, 238.6080, 241.1570, 237.0780, 236.5690, 238.6080, 242.4310, 238.6080) # Kalmiopsis, Medford, Deschutes, John Day, Olympics, Snoqualmie, Colville, N Cascades
-# NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
+# NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/1983/'
 
-# plot_NARR_gridMET(plot_date, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir)
+# plot_NARR_gridMET(plot_date, multi, plot_lon, plot_lat, NARR_gridMET_pkl_in_dir)
 # ----------------------------------------
+
+
+
+# ----------------------------------------
+# ''' Build monthly NARR-gridMET '''
+# NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
+# NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/'
+
+# build_monthly_NARR_gridMET(NARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir)
+# ----------------------------------------
+
 
 
 # ----------------------------------------
@@ -2243,6 +2645,90 @@ plot_multi_NARR_csv()
 
 
 
+# THIS FUNCTION TAKES IN df_MULTI.csv DATA AND PLOTS ITS VARIABLES INCLUDING H500, TEMP, SPFH, PVEL, CWTR. NOT
+# VERY USEFUL BECAUSE THE MULTI DATA CAN NOW BE PROCESSED BY import_NARR_csv():
+# ----------------------------------------
+''' Import Multi 3D NARR data (rectilinear grid) '''
+# lon_min = 235
+# lat_min = 244
+# lon_max = 41
+# lat_max = 50
+# import_interval = 2
+# export_interval = 10
+# multi = False
+# NARR_csv_in_dir  = '/home/dp/Documents/FWP/NARR/csv/1983/'  #'/mnt/seagate/NARR/3D/temp/csv/'  # '/home/dp/Documents/FWP/NARR/csv_exp/rectilinear_grid/'
+# NARR_csv_out_dir = '/home/dp/Documents/FWP/NARR/csv/1983/'     # Used in Postgres
+# NARR_pkl_out_dir = '/home/dp/Documents/FWP/NARR/pickle/1983/'     #'/home/dp/Documents/FWP/NARR/pickle_exp/rectilinear_grid/'
+
+# import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir)
+# ----------------------------------------
+
+
+# def plot_multi_NARR_csv():
+#     # IMPORT NARR MULTI 3D:
+#     # df = pd.read_csv('/home/dp/Documents/FWP/NARR/csv/1980/df_MULTI.csv', header='infer', index_col=None)
+#     df = pd.read_pickle('/home/dp/Documents/FWP/NARR/pickle/1983/df_MULTI.pkl')
+#     df.reset_index(inplace=True)
+#     df.set_index(['lat','lon'], inplace=True)
+#     print('df:\n', df)
+
+#     df_loc = df.loc[[(43.0784,241.412)]]# 39.0, 233.000)]]
+#     df.reset_index(inplace=True)
+#     # df_loc['SPFH RM'] = df_loc['SPFH'].rolling(30).mean()
+#     # print('df_loc[[SPFH, SPFH RM]]:\n', df_loc[['SPFH', 'SPFH RM']])
+
+#     df_loc.reset_index(inplace=True)
+#     df_loc.set_index('time', inplace=True)
+#     # df_loc_fall = df_loc.loc['1981-09-15':'1981-11-15']
+#     # print('df_loc_fall:\n', df_loc_fall.to_string())
+
+#     df_loc.reset_index(inplace=True)
+#     df.set_index(['lat','lon'], inplace=True)
+
+
+#     # Plotting time to identify missing data
+#     plt.close()
+#     plt.figure()
+#     plt.scatter(x=df_loc.index.values, y=df_loc['time'], c='k', edgecolor='k', facecolor='white', s=3)
+#     plt.show()
+
+#     # Plotting H500
+#     plt.close()
+#     f, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(10,4))
+#     df_loc.plot(x='time', y='H500', ax=ax1, c='#673a8e')
+#     df_loc.plot(x='time', y='H500 Grad X', ax=ax2, c='#adcfd8')
+#     df_loc.plot(x='time', y='H500 Grad Y', ax=ax3, c='#50844b')
+#     # df_erc_loc.plot(x='time', y='erc', ax=ax5, c='r')
+#     plt.subplots_adjust(hspace=0.3)
+#     plt.savefig('NARR H500', bbox_inches='tight')
+#     plt.show()
+
+#     # IMPORT ERC:
+#     df_erc = pd.read_pickle('/home/dp/Documents/FWP/gridMET/pickle/1983/df_erc.pkl')
+#     df_erc.reset_index(inplace=True)
+#     df_erc['lon'] = df_erc['lon'] + 360
+#     df_erc.set_index(['lat','lon'], inplace=True)
+#     print('df_erc:\n', df_erc)
+#     df_erc_loc = df_erc.loc[(43.0667, 241.4)]
+#     print('df_erc_loc:\n', df_erc_loc)
+
+
+#     # Plotting all multi 3D NARR:
+#     plt.close()
+#     f, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5,1, figsize=(4,10))
+#     df_loc.plot(x='time', y='H500', ax=ax1, c='#673a8e')
+#     df_loc.plot(x='time', y='TEMP', ax=ax2, c='#adcfd8')
+#     df_loc.plot(x='time', y='SPFH', ax=ax3, c='#50844b')
+#     df_loc.plot(x='time', y='SPFH RM', ax=ax3, c='#2a4c27')
+#     df_loc.plot(x='time', y='CWTR', ax=ax4, c='#821b1b')
+#     df_erc_loc.plot(x='time', y='erc', ax=ax5, c='r')
+#     plt.subplots_adjust(hspace=0.3)
+#     plt.savefig('NARR 3D Multi', bbox_inches='tight')
+#     plt.show()
+
+#     return
+
+# # plot_multi_NARR_csv()
 
 
 
@@ -2370,103 +2856,6 @@ def plot_SOM_results__Julia(csv_import_dir):
 
 
 
-# This function imports df_NARR_ERC_categorical.csv and processes it for export to csv format
-# for SOM training in R and Julia:
-def export_NARR_ERC__R():
-    # Exporting gradients and ERC to csv:
-    df = pd.read_csv('/home/dp/Documents/FWP/NARR_gridMET/csv/df_NARR_ERC_categorical.csv', header='infer')
-    print('df:\n', df)
-    # cols = ['time','H500 Grad X', 'H500 Grad Y', 'PMSL Grad X', 'PMSL Grad Y', 'ERC']
-    cols = ['time','H500', 'ERC'] # Selecting the desired columns
-    start_date_str = '1979-06-01'
-    # end_date_str =   '1979-08-31'
-    end_date_str =   '1979-06-30'
-    # export_filename = 'NARR_ERC_June_thru_August_1979_gradients_categorical.csv'
-    export_filename = 'NARR_ERC_June_1979_h500_only_categorical.csv'
-
-    df = df[cols]
-    invalid_mask = (df['ERC'] != 'invalid')
-    print('invalid_mask:\n', invalid_mask)
-    df = df.loc[ invalid_mask ]   # removing invalid ERC
-    df['time'] = pd.to_datetime(df['time'])                 # convert time column to datetime
-    df.set_index('time', inplace=True)                                # set time column to index
-    start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()             # specify start and end dates
-    end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-    df = df.loc[[start_date,end_date]]                 # get data from date range
-    df.reset_index(drop=True, inplace=True) # Don't need time index anymore
-
-    # Scaling:
-    x = df[cols[1:-1]] # cols[1,-1] avoids first time column and last ERC column
-    y = df[['ERC']]
-    x_train, x_test, y_train, y_test = train_test_split(x, y , train_size=0.7, random_state=90)
-    print('x_train:\n', x_train)
-    print('y_train:\n', y_train)
-
-    # Normalize Training Data (std_scale is used on train and test data)
-    std_scale = preprocessing.StandardScaler().fit(x_train)
-    
-    x_train_norm = std_scale.transform(x_train) # x_train_norm is a numpy array
-    #Converting numpy array to dataframe
-    x_train_norm = pd.DataFrame(x_train_norm, index=x_train.index, columns=x_train.columns) 
-
-
-    # Normalize Testing Data by using mean and SD of training set
-    x_test_norm = std_scale.transform(x_test) # x_test_norm is a numpy array
-    x_test_norm = pd.DataFrame(x_test_norm, index=x_test.index, columns=x_test.columns)
-
-    # WARNING: NOT USING ANY AXIS ALIGNMENT. THIS WORKS BUT MAY NOT BE GOOD PRACTICE.
-    xy_train = pd.concat((x_train, y_train), axis=1)
-    xy_test = pd.concat((x_test, y_test), axis=1)
-    xy_train_norm = pd.concat((x_train_norm, y_train), axis=1)
-    xy_test_norm = pd.concat((x_test_norm, y_test), axis=1)
-
-    # NOTE: THE EXPORT FILENAMES ARE GENERIC. SHOULD FIND A MORE SUITABLE NAME.
-    # Export to R folder
-    x_train.to_csv('/home/dp/Documents/FWP/R/x_train.csv', index=False)
-    x_test.to_csv('/home/dp/Documents/FWP/R/x_test.csv', index=False)
-    y_train.to_csv('/home/dp/Documents/FWP/R/y_train.csv', index=False)
-    y_test.to_csv('/home/dp/Documents/FWP/R/y_test.csv', index=False)
-    xy_train.to_csv('/home/dp/Documents/FWP/R/xy_train.csv', index=False)
-    xy_test.to_csv('/home/dp/Documents/FWP/R/xy_test.csv', index=False)
-    x_train_norm.to_csv('/home/dp/Documents/FWP/R/x_train_norm.csv', index=False)
-    x_test_norm.to_csv('/home/dp/Documents/FWP/R/x_test_norm.csv', index=False)
-    xy_train_norm.to_csv('/home/dp/Documents/FWP/R/xy_train_norm.csv', index=False)
-    xy_test_norm.to_csv('/home/dp/Documents/FWP/R/xy_test_norm.csv', index=False)
-
-    # Export to Julia folder
-    x_train.to_csv('/home/dp/Documents/FWP/Julia/x_train.csv', index=False)
-    x_test.to_csv('/home/dp/Documents/FWP/Julia/x_test.csv', index=False)
-    y_train.to_csv('/home/dp/Documents/FWP/Julia/y_train.csv', index=False)
-    y_test.to_csv('/home/dp/Documents/FWP/Julia/y_test.csv', index=False)
-    xy_train.to_csv('/home/dp/Documents/FWP/Julia/xy_train.csv', index=False)
-    xy_test.to_csv('/home/dp/Documents/FWP/Julia/xy_test.csv', index=False)
-    x_train_norm.to_csv('/home/dp/Documents/FWP/Julia/x_train_norm.csv', index=False)
-    x_test_norm.to_csv('/home/dp/Documents/FWP/Julia/x_test_norm.csv', index=False)
-    xy_train_norm.to_csv('/home/dp/Documents/FWP/Julia/xy_train_norm.csv', index=False)
-    xy_test_norm.to_csv('/home/dp/Documents/FWP/Julia/xy_test_norm.csv', index=False)
-
-    return
-
-
-
-def plot_SOM_results__R():
-    changes100 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_100iters.csv', header=0, delim_whitespace=True)
-    changes200 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_200iters.csv', header=0, delim_whitespace=True)
-    changes400 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_400iters.csv', header=0, delim_whitespace=True)
-    changes800 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_800iters.csv', header=0, delim_whitespace=True)
-    changes1600 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_1600iters.csv', header=0, delim_whitespace=True)
-    changes2200 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_2200iters.csv', header=0, delim_whitespace=True)
-    changes4400 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_4400iters.csv', header=0, delim_whitespace=True)
-    # changes8800 = pd.read_csv('/home/dp/Documents/FWP/R/SOM_changes_8800iters.csv', header=0, delim_whitespace=True)
-
-    df = pd.DataFrame([])
-    df = pd.concat((changes100, changes200, changes400, changes800, changes1600, changes2200, changes4400), axis=1, ignore_index=True)
-    df.columns = ['100','200','400','800','1600','2200','4400']
-    
-    df.plot(y=['100','200','400','800','1600','2200','4400'], kind='line')
-    plt.show()
-
-    return
 
 
 # ----------------------------------------
@@ -2476,8 +2865,18 @@ def plot_SOM_results__R():
 # ----------------------------------------
 
 # ----------------------------------------
-''' Export data for SOM processing in R and Julia '''
-# export_NARR_ERC__R()
+''' Export one year of data for SOM processing in R and Julia '''
+# export_NARR_ERC_one_year__R_Julia()
+# ----------------------------------------
+
+# ----------------------------------------
+''' Export monthly and all years data for SOM processing in R and Julia '''
+month_num                = 8
+cols                     = ['H500','ERC'] # Selecting the desired columns
+NARR_gridMET_csv_in_dir  = '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/Categorical/' # Using categorical data
+NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/'
+
+export_NARR_ERC_categorical__R_Julia(month_num, cols, NARR_gridMET_csv_in_dir, NARR_gridMET_csv_out_dir)
 # ----------------------------------------
 
 # ----------------------------------------
