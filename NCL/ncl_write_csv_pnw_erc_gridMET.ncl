@@ -11,9 +11,9 @@
 
 begin
 ;---NetCDF file to read in
-  cdir     = "/home/dp/Documents/FWP/gridMET/"
-  cdir_nc  = cdir + "nc/"  ; /FWP/gridMET/nc/
-  cdir_csv = cdir + "csv/" ; /FWP/gridMET/csv/
+  cdir     = "/home/dp/Documents/FWP/gridMET/" ; No need to change this
+  cdir_nc  = cdir + "nc/"  ; /FWP/gridMET/nc/  ; Put erc_YEAR.nc into this folder
+  cdir_csv = cdir + "csv/" ; /FWP/gridMET/csv/ ; csv output will be put here
 
 ;---Select subset
   lat_min =   39

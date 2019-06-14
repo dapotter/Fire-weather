@@ -42,9 +42,9 @@ begin
 
     ;-------  Seagate NARR data directories  -------
     
-    cdir = "/mnt/seagate/NARR/1981/3D/temp/nc/"                    ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/1981/flx/temp/nc/"                         ; Seagate  - NARR data - flx - PMSL
-    ; cdir = "/mnt/seagate/NARR/1981/pbl/temp/nc/"                         ; Seagate  - NARR data - pbl - CAPE
+    ; cdir = "/mnt/seagate/NARR/1984/3D/temp/nc/nc4/"                    ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/1984/flx/temp/nc/nc4/"                         ; Seagate  - NARR data - flx - PMSL
+    cdir = "/mnt/seagate/NARR/1984/pbl/temp/nc/nc4/"                         ; Seagate  - NARR data - pbl - CAPE
 
     grib_per_csv = 100   ; Set the number of grib/netCDF files to go into one csv file. Max is 131 due to csv row limitations.
 
@@ -53,8 +53,8 @@ begin
     netCDF             = True  ; If processing netCDF files
 
     ; If exporting one or multiple variables to csv:
-    single               = False ; Processing single var...
-    multi                = True  ; or multi var?
+    single               = True ; Processing single var...
+    multi                = False  ; or multi var?
 
     ;-------  Grib SYNVAR  -------
     ; SYNVAR             = "HGT_221_ISBL" ; for grib
@@ -62,24 +62,24 @@ begin
     ; SYNVAR             = "CAPE_221_SPDY" ; for grib
 
     ;-------  netCDF SYNVAR  -------
-    SYNVAR             = "H500" ; for netCDF    
-    SYNVAR_2           = "TEMP"         ; Temperature, K
-    SYNVAR_3           = "PVEL"         ; Pressure vertical velocity, Pa/s
-    SYNVAR_4           = "SPFH"         ; Specific humidity, kg/kg
-    SYNVAR_5           = "CWTR"         ; Cloud water, kg/kg
+    ; SYNVAR             = "H500" ; for netCDF    
+    ; SYNVAR_2           = "TEMP"         ; Temperature, K
+    ; SYNVAR_3           = "PVEL"         ; Pressure vertical velocity, Pa/s
+    ; SYNVAR_4           = "SPFH"         ; Specific humidity, kg/kg
+    ; SYNVAR_5           = "CWTR"         ; Cloud water, kg/kg
 
     ; SYNVAR             = "PMSL" ; for netCDF
-    ; SYNVAR             = "CAPE" ; for netCDF
+    SYNVAR             = "CAPE" ; for netCDF
 
     ;-------  Grib or netCDF SYNABBR  -------
-    SYNABBR            = "H500"         ; Geopotential height, gpm
-    SYNABBR_2          = "TEMP"         ; Temperature, K
-    SYNABBR_3          = "PVEL"         ; Pressure vertical velocity, Pa/s
-    SYNABBR_4          = "SPFH"         ; Specific humidity, kg/kg
-    SYNABBR_5          = "CWTR"         ; Cloud water, kg/kg
+    ; SYNABBR            = "H500"         ; Geopotential height, gpm
+    ; SYNABBR_2          = "TEMP"         ; Temperature, K
+    ; SYNABBR_3          = "PVEL"         ; Pressure vertical velocity, Pa/s
+    ; SYNABBR_4          = "SPFH"         ; Specific humidity, kg/kg
+    ; SYNABBR_5          = "CWTR"         ; Cloud water, kg/kg
 
     ; SYNABBR            = "PMSL"
-    ; SYNABBR            = "CAPE"
+    SYNABBR            = "CAPE"
 
  
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file

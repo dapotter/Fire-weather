@@ -45,35 +45,35 @@ begin
 
     ;-------  Seagate NARR data directories  -------
 
-    cdir = "/mnt/seagate/NARR/1981/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/1981/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
-    ; cdir = "/mnt/seagate/NARR/1981/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
+    ; cdir = "/mnt/seagate/NARR/1984/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/1984/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
+    cdir = "/mnt/seagate/NARR/1984/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
     
     ; If exporting one or multiple variables to netCDF files:
-    single               = False     ; Processing single var...
-    multi                = True    ; or multi var?
+    single               = True     ; Processing single var...
+    multi                = False    ; or multi var?
 
-    SYNVAR               = "HGT_221_ISBL"  ; This is always set
-    SYNVAR_2             = "TMP_221_ISBL"  ; SYNVAR_2 to SYNVAR_5 only matter if multi = True
-    SYNVAR_3             = "V_VEL_221_ISBL"
-    SYNVAR_4             = "SPF_H_221_ISBL"
-    SYNVAR_5             = "CLWMR_221_ISBL"
+    ; SYNVAR               = "HGT_221_ISBL"  ; This is always set
+    ; SYNVAR_2             = "TMP_221_ISBL"  ; SYNVAR_2 to SYNVAR_5 only matter if multi = True
+    ; SYNVAR_3             = "V_VEL_221_ISBL"
+    ; SYNVAR_4             = "SPF_H_221_ISBL"
+    ; SYNVAR_5             = "CLWMR_221_ISBL"
 
     ; SYNVAR             = "PRMSL_221_MSL"
-    ; SYNVAR             = "CAPE_221_SPDY"
+    SYNVAR             = "CAPE_221_SPDY"
 
 
     lvl                    = 500            ; arbitrary pressure level for H500
 
 
-    SYNABBR              = "H500"         ; Geopotential height, gpm
-    SYNABBR_2            = "TEMP"         ; Temperature, K
-    SYNABBR_3            = "PVEL"         ; Pressure vertical velocity, Pa/s
-    SYNABBR_4            = "SPFH"         ; Specific humidity, kg/kg
-    SYNABBR_5            = "CWTR"         ; Cloud water, kg/kg
+    ; SYNABBR              = "H500"         ; Geopotential height, gpm
+    ; SYNABBR_2            = "TEMP"         ; Temperature, K
+    ; SYNABBR_3            = "PVEL"         ; Pressure vertical velocity, Pa/s
+    ; SYNABBR_4            = "SPFH"         ; Specific humidity, kg/kg
+    ; SYNABBR_5            = "CWTR"         ; Cloud water, kg/kg
     
     ; SYNABBR            = "PMSL"
-    ; SYNABBR            = "CAPE"
+    SYNABBR            = "CAPE"
  
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
     ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
