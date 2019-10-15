@@ -1,0 +1,19 @@
+In this folder:
+The H500, ERC and other variables were standardized using StandardScaler
+The inverted values for the predicted ERC, as shown in the plots, are incorrect,
+I'm not sure why the inverse_transform isn't working.
+In the file names, cv=2 means the validation_split in the model training is 0.2,
+cv=3 means 0.3,
+do means dropout, do=5 means 0.5, 0001 means 0.0001
+Epochs=300 unless otherwise specified in the file name
+Batch=512 unless otherwise specified in the file name
+
+Typical results with the standard scaler:
+Train Score: 0.37 MSE (0.61 RMSE)
+Test Score: 0.46 MSE (0.68 RMSE)
+
+Typical results with the minmax scaler:
+Train Score: 0.00 MSE (0.07 RMSE)
+Test Score: 0.01 MSE (0.07 RMSE)
+
+
