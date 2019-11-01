@@ -527,6 +527,7 @@ def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
 
     return
 
+
 def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, export_interval, multi, NARR_csv_in_dir, NARR_csv_out_dir, NARR_pkl_out_dir):
     # ----------------------------------------------------------------------------------------------------
     # PARAMETERS:
@@ -854,7 +855,9 @@ def import_multi_NARR_csv(lon_min, lon_max, lat_min, lat_max, import_interval, e
     return
 
 
-def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
+# I'm not sure why this is here so I've commented it out. I think it
+# got accidentally duplicated:
+# def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
     # ----------------------------------------------------------------------------
     # PARAMETERS:
     #
@@ -901,21 +904,29 @@ def import_gridMET_csv(gridMET_csv_in_dir, gridMET_pkl_out_dir):
 def merge_NARR_gridMET(start_date, end_date, multi, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir):
     # ----------------------------------------------------------------------------
     # PARAMETERS:
-    # 
+    #
+    # PURPOSE:                  You have NARR and ERC data for a particular year and would like to merge
+    #                           the data into a single file. The two dataset grids don't align, so ERC's
+    #                           data is interpolated to the NARR grid so that both datasets have their
+    #                           values at the same locatoins. The resulting file for a single year pushes
+    #                           an 8 GB RAM limit, so it's recommended that only a single year is merged.
+    #
     # start_date:               Beginning of date range to merge. Can be any date as long as it exists
-    #                           in both gridMET (ERC) and NARR pickle files
+    #                           in both gridMET (ERC) and NARR pickle files. Typically would be 01/02/YEAR
+    #                           for the start of the year to merge.
     #
     # end_date:                 End of date range to merge. Can be any date as long as it exists
-    #                           in both gridMET (ERC) and NARR pickle files
+    #                           in both gridMET (ERC) and NARR pickle files. Typically would be 12/31/YEAR
+    #                           for the end of the year to merge.
     #
     # gridMET_pkl_in_dir:       Directory and file name of pickle file containing gridMET data
     #                           data such as daily ERC data.
     #
     # NARR_pkl_in_dir:          Directory that contains all of the NARR pickle files. Example
-    #                           NARR pickle file: '00_df_narr.pkl'
+    #                           NARR pickle file: '00_df_narr.pkl'.
     #
     # NARR_gridMET_pkl_out_dir: Directory to pickle out the combined NARR-gridMET 24hr resolution
-    #                           dataframe
+    #                           dataframe.
     # 
     # SCRIPT FUNCTION:
     # 
@@ -1241,10 +1252,10 @@ def merge_NARR_gridMET(start_date, end_date, multi, gridMET_pkl_in_dir, NARR_pkl
 
     # Index values (lon and lat) have carry out to many decimals (e.g. 42.058800000000000002)
     # Round to four decimals
-    decimals = 4
+    n_decimals = 4
     # df_NARR_ERC.reset_index(inplace=True)
-    df_NARR_ERC['lat'] = df_NARR_ERC['lat'].apply(lambda x: round(x, decimals))
-    df_NARR_ERC['lon'] = df_NARR_ERC['lon'].apply(lambda x: round(x, decimals))
+    df_NARR_ERC['lat'] = df_NARR_ERC['lat'].apply(lambda x: round(x, n_decimals))
+    df_NARR_ERC['lon'] = df_NARR_ERC['lon'].apply(lambda x: round(x, n_decimals))
     # df_NARR_ERC.set_index(['lat','lon'], inplace=True)
     print('df_NARR_ERC after rounding lat lon values:\n', df_NARR_ERC)
 
@@ -1267,6 +1278,171 @@ def merge_NARR_gridMET(start_date, end_date, multi, gridMET_pkl_in_dir, NARR_pkl
     df_NARR_ERC_categorical.to_pickle(NARR_gridMET_pkl_out_dir + 'df_NARR_ERC_categorical.pkl')
     df_NARR_ERC_categorical.to_csv(NARR_gridMET_csv_out_dir + 'df_NARR_ERC_categorical.csv', header=True, index=False) # Includes index columns, names all columns at top of file
     
+    return
+
+
+def stack_NARR_gridMET(NARR_gridMET_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir):
+    # Might build one single large pickle and csv file
+    # for all years' of data. I would prefer to keep this
+    # functionality here, but it could be put into
+    # merge_NARR_gridMET later.
+    # Note that build_monthly_NARR_gridMET below
+    # does a build of all years' of data for each
+    # individual month as well as a single large csv
+    # file of all years' data. The creation of one
+    # file containing all data can be deleted at some
+    # point as this function (stack_NARR_gridMET) will
+    # do this here.
+
+    # ----------------------------------------------------------------------------
+    # NOTE: After running merge_NARR_gridMET(), go into /FWP/NARR_gridMET/, pull out
+    #       all df_NARR_ERC_categorical.pkl files from their year folders,
+    #       rename to df_NARR_ERC_categorical_1979.pkl, etc for every year, and put
+    #       into /FWP/NARR_gridMET/. Then run this function to stack all years'
+    #       data into one df and export as a pickle and csv file.
+    #
+    # PARAMETERS:
+    #
+    # NARR_gridMET_pkl_in_dir:      Directory of pickle NARR-gridMET directories
+    #                               containing each year of data.
+    #
+    # NARR_gridMET_pkl_out_dir:     Directory of export for all years of NARR-gridMET
+    #                               data in pkl format.
+    #
+    # NARR_gridMET_csv_out_dir:     Directory of export for all years of NARR-gridMET
+    #                               data in csv format.
+    # 
+    # SCRIPT FUNCTION:
+    # 
+    # 1)    NARR-gridMET data exists in the directory /FWP/NARR_gridMET.
+    #       This function imports all pickle files ending in *YEAR.pkl and
+    #       joins them into df_NARR_gridMET_all_years containing every year
+    #       of NARR-gridMET data (this dataset can be massive).
+    #
+    # 2)    If any of the superfluous columns are present: TEMP, SPFH, TEMP, or
+    #       CWTR, they are dropped.
+    #
+    # 3)    
+    #           
+    # 4)    Exports to the same directory they were imported from and is placed in:
+    #           /Training/Categorical
+    #           /Training/Continuous
+    #       depending on whether the ERC data is in categorical or continuous format.
+    #       Exports in pickle and csv formats.
+    #
+    # NOTE: The exported pickle files are for backup purposes and to import for
+    #       processing in Python if necessary.
+    # ----------------------------------------------------------------------------
+
+    # Import NARR-gridMET data for all years
+    # NOTE: NARR_pkl_files are all pickle files named 'df_NARR_ERC_XXXX.pkl' (XXXX = year)
+    continuous_path = NARR_gridMET_pkl_in_dir + 'Continuous/'
+    categorical_path = NARR_gridMET_pkl_in_dir + 'Categorical/'
+
+    NARR_gridMET_cont_pkl_files = glob.glob(os.path.join(continuous_path, '*.pkl'))
+    NARR_gridMET_cat_pkl_files = glob.glob(os.path.join(categorical_path, '*.pkl'))
+
+    print('NARR_gridMET_cont_pkl_files:\n', NARR_gridMET_cont_pkl_files)
+    print('NARR_gridMET_cat_pkl_files:\n', NARR_gridMET_cat_pkl_files)
+
+    # Sorting the files so they go into the dataframe in the correct order
+    NARR_gridMET_cont_pkl_files = sorted(NARR_gridMET_cont_pkl_files)
+    NARR_gridMET_cat_pkl_files = sorted(NARR_gridMET_cat_pkl_files)
+    print('NARR_gridMET_cont_pkl_files after sort:\n', NARR_gridMET_cont_pkl_files)
+    print('NARR_gridMET_cat_pkl_files after sort:\n', NARR_gridMET_cat_pkl_files)
+
+    # Read in each year's pickle file and concatenate them:
+    df_cont = (pd.read_pickle(file) for file in NARR_gridMET_cont_pkl_files)
+    df_cat = (pd.read_pickle(file) for file in NARR_gridMET_cat_pkl_files)
+
+    # Concatenate:
+    df_NARR_gridMET_cont_all_years = pd.concat(df_cont, axis=0, sort=False)
+    df_NARR_gridMET_cat_all_years = pd.concat(df_cat, axis=0, sort=False)
+    print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years)
+    print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
+
+    # Drop superfluous columns:
+    print('Dropping multi columns...\n')
+    df_NARR_gridMET_cont_all_years.drop(['CAPE','TEMP','SPFH','PVEL','CWTR'], axis=1, inplace=True)
+    df_NARR_gridMET_cat_all_years.drop(['CAPE','TEMP','SPFH','PVEL','CWTR'], axis=1, inplace=True)
+
+    # ----------------------------------------
+
+    # NaN Check:
+    # Column NaNs
+    cont_column_nans = df_NARR_gridMET_cont_all_years.isnull().sum(axis=0)
+    cat_column_nans = df_NARR_gridMET_cat_all_years.isnull().sum(axis=0)
+    # All NaNs:
+    cont_nans = df_NARR_gridMET_cont_all_years.isnull().sum().sum()
+    cat_nans = df_NARR_gridMET_cat_all_years.isnull().sum().sum()
+    print('cont_nans:\n', cont_nans)
+    if cont_nans > 0 or cat_nans > 0:
+        print('Continuous NaNs:\n', cont_column_nans)
+        print('Categorical NaNs:\n', cat_column_nans)
+        print('Warning: NaNs are present, terminating function.')
+        return
+    else:
+        print('NaN check: Data is free of missing values')
+
+    # ----------------------------------------
+
+    # Sorting by lat and lon:
+    print('Sorting values...\n')
+    df_NARR_gridMET_cont_all_years.sort_values(['lat','lon'], inplace=True)
+    df_NARR_gridMET_cat_all_years.sort_values(['lat','lon'], inplace=True)
+    print('df_NARR_gridMET_cont_all_years lat, lon index:\n', df_NARR_gridMET_cont_all_years)
+    print('df_NARR_gridMET_cat_all_years lat, lon index:\n', df_NARR_gridMET_cat_all_years)
+
+    # Convert time column to datetime:
+    df_NARR_gridMET_cont_all_years['time'] = pd.to_datetime(df_NARR_gridMET_cont_all_years['time'])
+
+    # Set lat and lon as index:
+    print('Setting index...\n')
+    df_NARR_gridMET_cont_all_years.set_index(['lat','lon'], inplace=True)
+    df_NARR_gridMET_cat_all_years.set_index(['lat','lon'], inplace=True)
+
+    print('df_NARR_gridMET_cont_all_years lat, lon index:\n', df_NARR_gridMET_cont_all_years)
+    print('df_NARR_gridMET_cat_all_years lat, lon index:\n', df_NARR_gridMET_cat_all_years)
+
+    # ----------------------------------------
+    
+    # PLOTTING:
+    # Get one location for plotting:
+    df_NARR_gridMET_cont_all_years_loc = df_NARR_gridMET_cont_all_years.loc[(42.0588, 236.0590), :]
+    df_NARR_gridMET_cont_all_years_loc.reset_index(inplace=True)
+
+    fig, (ax1, ax2) = plt.subplots(1,2, figsize=(9,4))
+    df_NARR_gridMET_cont_all_years_loc.plot(x='time', y='H500', ax=ax1, color='cyan')
+    df_NARR_gridMET_cont_all_years_loc.plot(x='time', y='ERC', ax=ax2, color='red')
+    ax1.set_title('H500')
+    ax2.set_title('ERC')
+    plt.suptitle('Kalmiopsis Wilderness')
+    plt.show()
+    
+    # ----------------------------------------
+
+    # PKL EXPORT:
+    # Export all years' data to pickle format:
+    cont_pkl_export_file = NARR_gridMET_pkl_out_dir + 'df_NARR_gridMET_all_years.pkl'
+    cat_pkl_export_file = NARR_gridMET_pkl_out_dir + 'df_NARR_gridMET_categorical_all_years.pkl'
+
+    print('Exporting to pickle the continuous and categorical data for all years. This could take a few seconds...')
+    df_NARR_gridMET_cont_all_years.to_pickle(cont_pkl_export_file)
+    df_NARR_gridMET_cat_all_years.to_pickle(cat_pkl_export_file)
+    print('Finished pickle export')
+    
+    # ----------------------------------------
+
+    # CSV EXPORT:
+    # Export all years' data to csv format:
+    cont_csv_export_file = NARR_gridMET_csv_out_dir + 'df_NARR_gridMET_all_years.csv'
+    cat_csv_export_file = NARR_gridMET_csv_out_dir + 'df_NARR_gridMET_categorical_all_years.csv'
+
+    print('Exporting to csv the continuous and categorical data for all years. This could take a few minutes...')
+    df_NARR_gridMET_cont_all_years.to_csv(cont_csv_export_file)
+    df_NARR_gridMET_cat_all_years.to_csv(cat_csv_export_file)
+    print('Finished csv export')
+
     return
 
 
@@ -1650,7 +1826,7 @@ def plot_NARR_gridMET(plot_date, multi, plot_lon, plot_lat, NARR_gridMET_pkl_in_
     df_NARR_ERC_lon_lat_time_series_2['Location'] = 'John Day'
     df_NARR_ERC_lon_lat_time_series_3['Location'] = 'Medford'
 
-    df = pd.concat((df_NARR_ERC_lon_lat_time_series_0, 
+    df = pd.concat((df_NARR_ERC_lon_lat_time_series_0,
                     df_NARR_ERC_lon_lat_time_series_1,
                     df_NARR_ERC_lon_lat_time_series_2,
                     df_NARR_ERC_lon_lat_time_series_3), axis=0)
@@ -2117,9 +2293,6 @@ def plot_NARR_gridMET(plot_date, multi, plot_lon, plot_lat, NARR_gridMET_pkl_in_
     # -------------------------------------------------------------------
 
 
-
-
-
     # Seaborn Pairplot. WAY TOO MUCH DATA TO MAKE SENSE OF THIS PLOT:
     # sns.set(style="ticks")
     # sns.pairplot(df_NARR_ERC_categorical, hue="ERC")
@@ -2131,7 +2304,7 @@ def plot_NARR_gridMET(plot_date, multi, plot_lon, plot_lat, NARR_gridMET_pkl_in_
     return
 
 
-def build_monthly_NARR_gridMET(ARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir):
+def build_monthly_NARR_gridMET(NARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir):
     # ----------------------------------------------------------------------------
     # NOTE: After running merge_NARR_gridMET(), go into /FWP/NARR_gridMET/, pull out
     #       all df_NARR_ERC_categorical.pkl files from their year folders,
@@ -2197,7 +2370,8 @@ def build_monthly_NARR_gridMET(ARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir)
     df_cat = (pd.read_pickle(file) for file in NARR_gridMET_cat_pkl_files)
     df_NARR_gridMET_cont_all_years = pd.concat(df_cont, axis=0)
     df_NARR_gridMET_cat_all_years = pd.concat(df_cat, axis=0)
-    print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years); print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
+    print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years)
+    print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
     
     # Drop superfluous columns:
     df_NARR_gridMET_cont_all_years.drop(['TEMP','SPFH','PVEL','CWTR'], axis=1, inplace=True)
@@ -2207,17 +2381,27 @@ def build_monthly_NARR_gridMET(ARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir)
     df_NARR_gridMET_cont_all_years.set_index(['lat','lon'], inplace=True)
     df_NARR_gridMET_cat_all_years.set_index(['lat','lon'], inplace=True)
 
-    # Get one location for plotting:
-    df_NARR_gridMET_cont_all_years = df_NARR_gridMET_cont_all_years.loc[(42.0588, 236.0590)]
+    # Convert time column to datetime:
     df_NARR_gridMET_cont_all_years['time'] = pd.to_datetime(df_NARR_gridMET_cont_all_years['time'])
 
-    # plt.figure()
-    # plt.plot(df_NARR_gridMET_all_years_loc['time'], df_NARR_gridMET_all_years_loc['H500'])
-    # plt.show()
 
-    # plt.figure()
-    # plt.plot(df_NARR_gridMET_all_years_loc['time'], df_NARR_gridMET_all_years_loc['ERC'])
-    # plt.show()
+    # ----------------------------------------
+    # PLOTTING:
+    # Get one location for plotting:
+    df_NARR_gridMET_cont_all_years_loc = df_NARR_gridMET_cont_all_years.loc[(42.0588, 236.0590)]
+    df_NARR_gridMET_cont_all_years_loc['time'] = pd.to_datetime(df_NARR_gridMET_cont_all_years_loc['time'])
+
+    # H500 vs time
+    plt.figure()
+    plt.plot(df_NARR_gridMET_all_years_loc['time'], df_NARR_gridMET_all_years_loc['H500'])
+    plt.show()
+
+    # ERC vs time
+    plt.figure()
+    plt.plot(df_NARR_gridMET_all_years_loc['time'], df_NARR_gridMET_all_years_loc['ERC'])
+    plt.show()
+    # ----------------------------------------
+
 
     # Create month column containing month number (1 for January, etc)
     df_NARR_gridMET_cont_all_years['month'] = df_NARR_gridMET_cont_all_years['time'].dt.month
@@ -2225,19 +2409,19 @@ def build_monthly_NARR_gridMET(ARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir)
     print('df_NARR_gridMET_cont_all_years:\n', df_NARR_gridMET_cont_all_years)
     print('df_NARR_gridMET_cont_all_years columns:\n', df_NARR_gridMET_cont_all_years.columns)
 
-    # Export directories for continuous and categorical data
+    # Create export directories for continuous and categorical data
     continuous_export_dir = NARR_gridMET_csv_out_dir + 'Continuous/'
     categorical_export_dir = NARR_gridMET_csv_out_dir + 'Categorical/'
     print('continuous_export_dir:\n', continuous_export_dir)
     print('categorical_export_dir:\n', categorical_export_dir)
 
 
-    # EXPORT ALL YEARS' DATA TO ONE CSV:
-    continuous_export_file = continuous_export_dir+'df_NARR_gridMET_all_years.csv'
-    categorical_export_file = categorical_export_dir+'df_NARR_gridMET_categorical_all_years.csv'
-    print('Exporting to csv the continuous and categorical data for all years. This could take a few minutes...')
-    df_NARR_gridMET_cont_all_years.to_csv(continuous_export_file, index=True, header=True)
-    df_NARR_gridMET_cat_all_years.to_csv(categorical_export_file, index=True, header=True)
+    # # EXPORT ALL YEARS' DATA TO ONE CSV:
+    # continuous_export_file = continuous_export_dir+'df_NARR_gridMET_all_years.csv'
+    # categorical_export_file = categorical_export_dir+'df_NARR_gridMET_categorical_all_years.csv'
+    # print('Exporting to csv the continuous and categorical data for all years. This could take a few minutes...')
+    # df_NARR_gridMET_cont_all_years.to_csv(continuous_export_file, index=True, header=True)
+    # df_NARR_gridMET_cat_all_years.to_csv(categorical_export_file, index=True, header=True)
 
 
     # EXPORT EACH MONTH TO INDIVIDUAL CSVs:
@@ -2257,6 +2441,178 @@ def build_monthly_NARR_gridMET(ARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir)
         df_NARR_gridMET_cat_month.to_csv(categorical_export_file, index=True, header=True)
     return
 
+
+def export_NARR_gridMET_loc_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_loc_out_dir, location):
+    # ----------------------------------------------------------------------------
+    # PARAMETERS:
+    #
+    # NARR_gridMET_csv_in_dir:      Directory of pickle NARR-gridMET directories
+    #                               containing each year of data.
+    #
+    # NARR_gridMET_loc_pkl_out_dir: Directory of pickle NARR-gridMET for location
+    #                               data
+    #
+    # loc:  Longitude-latitude coordinates
+    #
+    # time_steps:   Number of time_steps. All of them are fine as we only have
+    #               1979 to 1983 (about 365*5 time steps)
+    # 
+    # SCRIPT FUNCTION:
+    # 
+    # 1)    Imports continuous (non-categorical) NARR ERC pickle data for all years
+    #
+    # 2)    Stacks them on top of one another
+    #
+    # 3)    Drops some columns and selects rows based on location coordinates
+    #
+    # 4)    Exports to a pickle file
+    #
+    # ----------------------------------------------------------------------------
+
+
+    df = pd.read_pickle(NARR_gridMET_pkl_in_dir)
+    print('Imported df:\n', df)
+    
+    df.reset_index(inplace=True)
+    location_mask = (df['lat'] == location[0]) & (df['lon'] == location[1])
+
+    # Make a column of normally distributed random noise for training baseline:
+    df['noise'] = np.random.randn(df.shape[0])
+
+    cols_to_keep = ['time','noise','H500','H500 Grad X','H500 Grad Y','PMSL','PMSL Grad X','PMSL Grad Y','ERC']
+    df_location = df.loc[ location_mask, cols_to_keep ]
+    print('df location shape:\n', df_location.shape)
+    print('df_location head:\n', df_location.head().to_string())
+    print('df_location tail:\n', df_location.tail().to_string())
+
+    # ----------------------------------------
+
+    # PLOTTING:
+    fig, (ax0, ax1, ax2, ax3, ax4) = plt.subplots(1,5, figsize=(14,3))
+    df_location.plot(x='time', y='noise', ax=ax0, color='gray')
+    df_location.plot(x='time', y='H500 Grad X', ax=ax1, color='purple', alpha=0.7)
+    df_location.plot(x='time', y='H500 Grad Y', ax=ax2, color='green', alpha=0.7)
+    df_location.plot(x='time', y='H500', ax=ax3, color='blue', alpha=0.7)
+    df_location.plot(x='time', y='ERC', ax=ax4, color='red')
+    plt.show()
+
+    # ----------------------------------------
+
+    print('Exporting location to pickle and csv files...')
+    df_location.to_pickle(NARR_gridMET_loc_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_Kalmiopsis_loc_all_years.pkl')
+    df_location.to_csv(NARR_gridMET_loc_out_dir + '/csv/Training/' + 'df_NARR_gridMET_Kalmiopsis_loc_all_years.csv', index=False)
+    print('Export complete')
+
+    return
+
+
+def export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_pkl_out_dir, region, region_name):
+    # ----------------------------------------------------------------------------
+    # PARAMETERS:
+    #
+    # NARR_gridMET_pkl_in_dir:      Directory of pickle NARR-gridMET directories
+    #                               containing each year of data.
+    #
+    # NARR_gridMET_reg_pkl_out_dir: Directory of pickle NARR-gridMET for regional
+    #                               data
+    #
+    # region:  Longitude-latitude coordinates from SW corner to NE corner of region
+    #
+    # time_steps:   No ability to select the number of time steps, may be added
+    #               at some point. Each time step is one day.
+    # 
+    # SCRIPT FUNCTION:
+    # 
+    # 1)    Imports continuous (non-categorical) NARR ERC pickle data for all years
+    #
+    # 2)    Stacks them on top of one another
+    #
+    # 3)    Drops some columns and selects rows based on region coordinates
+    #
+    # 4)    Exports to a pickle file
+    #
+    # ----------------------------------------------------------------------------
+
+    print('Region:\n', region)
+    df = pd.read_pickle(NARR_gridMET_pkl_in_dir)
+
+    print('df:\n', df.head().to_string())
+    print('df.shape:', df.shape)
+
+    df.reset_index(inplace=True)
+
+    # Entire dataset:
+    print('df lat-lon min max in the dataset:', ((np.min(df.lat), np.min(df.lon)), (np.max(df.lat), np.max(df.lon))))
+    unique_lat = np.unique(df.lat)
+    unique_lon = np.unique(df.lon)
+    n_lat = len(unique_lat)
+    n_lon = len(unique_lon)
+    print('Number of latitudes in OR and WA:', n_lat)
+    print('Number of longitudes in OR and WA:', n_lon)
+    print('Number of locations in OR and WA:', n_lat*n_lon)
+
+    # Select region:
+    region_mask = (df['lat'] <= region[1][0]) & (df['lat'] >= region[0][0]) & (df['lon'] <= region[1][1]) & (df['lon'] >= region[0][1])
+    cols_to_keep = ['time','lat','lon','H500','H500 Grad X','H500 Grad Y','PMSL','PMSL Grad X','PMSL Grad Y','ERC']
+    df_region = df.loc[ region_mask, cols_to_keep ]
+
+    # Remove invalid ERC values if present
+    df_region = df_region.loc[ df_region.ERC >= 0, : ]
+
+    # Region data:
+    print('df_region shape:', df_region.shape)
+    print('Region:', region)
+    print('df_region head:\n', df_region.head().to_string())
+    print('df_region tail:\n', df_region.tail().to_string())
+
+    unique_lat = np.unique(df_region.lat)
+    unique_lon = np.unique(df_region.lon)
+    n_lat = len(unique_lat)
+    n_lon = len(unique_lon)
+    print('Number of latitudes in region:', n_lat)
+    print('Number of longitudes in region:', n_lon)
+    print('Number of locations in region:', n_lat*n_lon)
+
+    # Making unique (lat,lon) location pairs:
+    locations = [(x,y) for x in unique_lat for y in unique_lon]
+    print('Locations:', locations)
+    df_reg_key = pd.DataFrame(index=range(0,len(locations))) # Make empty so that the locations list can be put into one column 'loc',
+    df_reg_key['loc'] = locations # otherwise pd.DataFrame(data=locations, columns='loc') fails as it tries
+    df_reg_key.index.set_names(names='key', inplace=True) # to split the list's (lat,lon) tuples into two columns.
+    print('df_reg_key:\n', df_reg_key)
+
+    mapper = {k:v for k,v in zip(locations,range(len(locations)))}
+    print('Mapper:', mapper)
+
+    # Merge lat and lon columns in df_region:
+    df_region['lat_lon'] = list(zip(df_region.lat, df_region.lon))
+
+    print('df_region:\n', df_region)
+
+    # Map locations to integers:
+    df_region['loc'] = df_region['lat_lon'].map(mapper)
+    print('df_region:\n', df_region)
+    # Pivoting:
+    df_region_piv = df_region.pivot(index='time', columns='loc', values=['H500','PMSL','H500 Grad X','H500 Grad Y','PMSL Grad X','PMSL Grad Y','ERC'])
+    print('Using pivot: df_region_piv:\n', df_region_piv)
+
+    ''' pivot_table conversion isn't needed: '''
+    # # USING pd.pivot_table(df_region):
+    # df_region_pt = pd.pivot_table(df_region, index='time', columns='loc', values=['H500','PMSL','ERC'])
+    # print('Using pivot_table: df_region_pt:\n', df_region_pt)
+
+    # Manipulating the multi-level columns into a single level
+    multi_level_cols = list(df_region_piv.columns)
+    one_level_cols = [x[0]+'_'+str(x[1]) for x in list(multi_level_cols)]
+    df_region_piv.columns = one_level_cols
+    print('df_region_piv with one level columns:\n', df_region_piv)
+
+    df_reg_key.to_pickle(NARR_gridMET_reg_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_key.pkl')
+    df_reg_key.to_csv(NARR_gridMET_reg_out_dir + '/csv/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_key.csv', index=True)
+
+    df_region_piv.to_pickle(NARR_gridMET_reg_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_all_years.pkl')
+    df_region_piv.to_csv(NARR_gridMET_reg_out_dir + '/csv/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_all_years.csv', index=True)
+    return
 
 
 # ----------------------------------------------- EXPORTING TO R & JULIA: -----------------------------------------------
@@ -2436,8 +2792,7 @@ def export_NARR_ERC_categorical__R_Julia(month_num, cols, NARR_gridMET_csv_in_di
     return
 
 
-
-# This function imports df_NARR_ERC_categorical.csv for a particular year 
+# export_NARR_ERC_one_year__R_Julia imports df_NARR_ERC_categorical.csv for a particular year 
 # and processes it for export to csv format for SOM training in R and Julia:
 def export_NARR_ERC_one_year__R_Julia():
     # Exporting gradients and ERC to csv:
@@ -2513,9 +2868,6 @@ def export_NARR_ERC_one_year__R_Julia():
     xy_test_norm.to_csv(csv_out_Julia + 'xy_test_norm.csv', index=False)
 
     return
-
-
-
 
 
 def plot_SOM_results__R():
@@ -2604,13 +2956,24 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # ''' Merge NARR and gridMET '''
 # start_date               = '1983,1,1'
 # end_date                 = '1983,12,31'
-# multi                    = False    # 1980 and 1981 set to True, all other years set False
+# multi                    = False    # multi refers to extra variables pulled from NCL. 1980 and 1981 set to True, all other years set False.
 # gridMET_pkl_in_dir       = '/home/dp/Documents/FWP/gridMET/pickle/1983/'
 # NARR_pkl_in_dir          = '/home/dp/Documents/FWP/NARR/pickle/1983/'       # '/home/dp/Documents/FWP/NARR/pickle/'
 # NARR_gridMET_pkl_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/1983/'
 # NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/1983/'
 
 # merge_NARR_gridMET(start_date, end_date, multi, gridMET_pkl_in_dir, NARR_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
+# ----------------------------------------
+
+
+
+# ----------------------------------------
+''' Stack NARR and gridMET '''
+# NARR_gridMET_pkl_in_dir  = '/home/dp/Documents/FWP/NARR_gridMET/pickle/'
+# NARR_gridMET_pkl_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/Training/'
+# NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/'
+
+# stack_NARR_gridMET(NARR_gridMET_pkl_in_dir, NARR_gridMET_pkl_out_dir, NARR_gridMET_csv_out_dir)
 # ----------------------------------------
 
 
@@ -2634,6 +2997,30 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/'
 
 # build_monthly_NARR_gridMET(NARR_gridMET_pkl_in_dir, NARR_gridMET_csv_out_dir)
+# ----------------------------------------
+
+
+
+# ----------------------------------------
+# ''' Export NARR-gridMET location to RNN '''
+# NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/Training/df_NARR_gridMET_all_years.pkl'
+# NARR_gridMET_loc_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/'
+# location = (42.0588, 236.0590)
+# export_NARR_gridMET_loc_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_loc_out_dir, location)
+# ----------------------------------------
+
+
+
+# ----------------------------------------
+# ''' Export NARR-gridMET region to RNN '''
+NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/Training/df_NARR_gridMET_all_years.pkl'
+NARR_gridMET_reg_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/'
+region = ((39.2549, 235.294), (46.3, 244))
+region_name = 'OR'
+#((42.0588, 236.0590), (42.3137, 236.314)) # Kalmiopsis region
+#((42, 236), (45, 238)) # From Oregon-California border south of Kalmiopsis up to Warm Springs reservation (96 grid points)
+#
+export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_out_dir, region, region_name)
 # ----------------------------------------
 
 
@@ -2871,200 +3258,15 @@ def plot_SOM_results__Julia(csv_import_dir):
 
 # ----------------------------------------
 ''' Export monthly and all years data for SOM processing in R and Julia '''
-month_num                = 8
-cols                     = ['H500','ERC'] # Selecting the desired columns
-NARR_gridMET_csv_in_dir  = '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/Categorical/' # Using categorical data
-NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/'
+# month_num                = 8
+# cols                     = ['H500','ERC'] # Selecting the desired columns
+# NARR_gridMET_csv_in_dir  = '/home/dp/Documents/FWP/NARR_gridMET/csv/Training/Categorical/' # Using categorical data
+# NARR_gridMET_csv_out_dir = '/home/dp/Documents/FWP/'
 
-export_NARR_ERC_categorical__R_Julia(month_num, cols, NARR_gridMET_csv_in_dir, NARR_gridMET_csv_out_dir)
+# export_NARR_ERC_categorical__R_Julia(month_num, cols, NARR_gridMET_csv_in_dir, NARR_gridMET_csv_out_dir)
 # ----------------------------------------
 
 # ----------------------------------------
 ''' Import & plot SOM learning from R '''
 # plot_SOM_results__R()
 # ----------------------------------------
-
-
-
-
-
-
-
-# Read in all csvs from folder
-# path = '..\\..\\data\\'
-# path = 'C:\\Users\Dan\Downloads\SOMPY_robust_clustering-master\SOMPY_robust_clustering-master\data\\'
-# all_NARR_files = glob.glob(os.path.join(path, "*.csv"))
-# print('all_NARR_files:\n' ,all_NARR_files[0:10])
-
-# # concat into one df
-# df_from_each_file = (pd.read_csv(f, skiprows = 31) for f in all_NARR_files)
-# concatenated_df   = pd.concat(df_from_each_file, ignore_index=True)
-
-# print('concatenated df head:\n', concatenated_df.head)
-# print('concatenated df columns:\n', concatenated_df.columns)
-
-# # get columns Lat, Long, Mean Temp, Max Temp, Min temp, Precipitation
-# data = concatenated_df[['Lat', 'Long', 'Tm', 'Tx', 'Tn', 'P']]
-# data = data.apply(pd.to_numeric,  errors='coerce') # Converting to floats
-# data = data.dropna(how='any')
-# names = ['Latitude', "longitude", 'Monthly Median temperature (C)','Monthly Max temperature (C)', 'Monthly Min temperature (C)', 'Monthly total precipitation (mm)']
-
-# print(data.head())
-
-# # create the SOM network and train it. You can experiment with different normalizations and initializations
-# sm = SOMFactory().build(data.values, normalization = 'var', initialization='pca', component_names=names)
-# sm.train(n_job=1, verbose=False, train_rough_len=2, train_finetune_len=5)
-
-# # The quantization error: average distance between each data vector and its BMU.
-# # The topographic error: the proportion of all data vectors for which first and second BMUs are not adjacent units.
-# topographic_error = sm.calculate_topographic_error()
-# quantization_error = np.mean(sm._bmu[1])
-# print ("Topographic error = %s; Quantization error = %s" % (topographic_error, quantization_error))
-
-# # component planes view
-# from sompy.visualization.mapview import View2D
-# view2D  = View2D(10,10,"rand data",text_size=12)
-# view2D.show(sm, col_sz=4, which_dim="all", denormalize=True)
-
-# # U-matrix plot
-# from sompy.visualization.umatrix import UMatrixView
-
-# umat  = UMatrixView(width=10,height=10,title='U-matrix')
-# umat.show(sm)
-
-
-
-# # do the K-means clustering on the SOM grid, sweep across k = 2 to 20
-# from sompy.visualization.hitmap import HitMapView
-# K = 20 # stop at this k for SSE sweep
-# K_opt = 18 # optimal K already found
-# [labels, km, norm_data] = sm.cluster(K,K_opt)
-# hits  = HitMapView(20,20,"Clustering",text_size=12)
-# a=hits.show(sm)
-
-# import gmplot
-
-# gmap = gmplot.GoogleMapPlotter(54.2, -124.875224, 6)
-# j = 0
-# for i in km.cluster_centers_:
-#    gmap.marker(i[0],i[1],'red', title="Centroid " + str(j))
-#    j += 1
-
-# gmap.draw("centroids_map.html")
-
-
-# from bs4 import BeautifulSoup
-
-# def insertapikey(fname, apikey):
-#    """put the google api key in a html file"""
-#    def putkey(htmltxt, apikey, apistring=None):
-#        """put the apikey in the htmltxt and return soup"""
-#        if not apistring:
-#            apistring = "https://maps.googleapis.com/maps/api/js?key=%s&callback=initMap"
-#        soup = BeautifulSoup(htmltxt, 'html.parser')
-#        body = soup.body
-#        src = apistring % (apikey, )
-#        tscript = soup.new_tag("script", src=src, async="defer")
-#        body.insert(-1, tscript)
-#        return soup
-#    htmltxt = open(fname, 'r').read()
-#    soup = putkey(htmltxt, apikey)
-#    newtxt = soup.prettify()
-#    open(fname, 'w').write(newtxt)
-# API_KEY= 'YOUR API KEY HERE'
-# insertapikey("centroids_map.html", API_KEY)
-
-
-# gmap = gmplot.GoogleMapPlotter(54.2, -124.875224, 6)
-# j = 0
-# for i in km.cluster_centers_:
-#    gmap.marker(i[0],i[1],'red', title="Centroid " + str(j))
-#    j += 1
-
-# gmap.draw("centroids_map.html")
-
-
-
-
-''' ---------------------- Plotting Code ---------------------- '''
-# ''' Interpolation '''
-# def interpgrid():
-#     z = np.array([-5.,-15.,-25.,-36.,-49.,-65.,-84.,-105.5,-130.5,-159.5,-192.5,
-#                   -230.,-273.,-322.5,-379.,-443.,-515.,-596.,-688.,-792.,-909.5,
-#                   -1042.5,-1192.5,-1362.,-1553.5,-1770.,-2015.,-2285.,-2565.,-2845.])
-#     y = np.arange(0,100)
-#     print('z:\n', z)
-#     print('y:\n', y)
-#     ''' np.random.ran(nrows, ncols) results in an nrows x ncols matrix:
-#         np.cumsum(array, axis=0) sums array row-to-row for each column.
-#         e.g. within column 0, the rows are summed downward so that the
-#         bottom row of column 0 is a summation of all of the values above. '''
-#     yz_matrix = np.cumsum(np.random.rand(len(z), len(y)), axis=0)
-#     ''' With yz_matrix full of unique values, it's possible to  '''
-#     print('yz_matrix:\n', yz_matrix)
-
-#     fig, (ax, ax2) = plt.subplots(ncols=2)
-
-#     # plot raw data as pcolormesh
-#     Y,Z = np.meshgrid(y,z[::-1])
-#     print('Z:\n', Z)
-#     print('Y:\n', Y)
-#     print('YI Shape:', np.shape(YI)) # 2840 x 100
-#     ax.pcolormesh(Y,Z, yz_matrix, cmap='inferno')
-#     ax.set_title("pcolormesh data")
-
-#     # now interpolate data to new grid
-#     zi = np.arange(-2845,-5) # A new, higher resolution z, increment is 1 from -2845 to -5
-#     print('zi:\n', zi)
-#     YI,ZI = np.meshgrid(y,zi)
-#     print('ZI:\n', ZI)
-#     print('ZI Shape:', np.shape(ZI))
-#     print('YI:\n', YI)
-#     print('YI Shape:', np.shape(YI)) # 2840 x 100
-#     points = np.c_[Y.flatten(),Z.flatten()] # Flattens the original 2-D Y array 30x100 to 1-D 1x3000
-
-#     ''' scipy.interpolate.griddate():
-#         points = original y,z points
-#         yz_matrix = data that fits into y,z points grid.
-#         (YI,ZI) = points at which to interpolate data
-#         method = linear interpolation '''
-#     interp = griddata(points, yz_matrix.flatten(), (YI,ZI), method='linear')
-#     print('interp:\n', interp)
-
-#     ax2.pcolormesh(YI,ZI, interp, cmap='inferno')
-#     ax2.set_title("pcolormesh interpolated")
-
-#     plt.show()
-#     return Y, Z
-# ''' ~~~~~~~~~~~~~~~~~ '''
-
-# ''' Contour '''
-# def simple_contour():
-#     x = [1,2,4,5,8,9,10]
-#     y = [1,3,5,7,8,14,18]
-#     z = np.random.randn(len(y), len(x))
-
-#     xi = np.arange(min(x), max(x), 0.5)
-#     yi = np.arange(min(y), max(y), 0.5)
-#     print('yi:\n', yi)
-
-#     x, y = np.meshgrid(x, y)
-#     xx, yy = np.meshgrid(xi, yi)
-#     print('xx:\n', xx)
-#     print('yy:\n', yy)
-
-#     # Interpolation
-#     points = np.c_[x.flatten(),y.flatten()]
-#     zi = griddata(points, z.flatten(), (xx, yy), method='linear')
-
-#     fig, (ax, ax2) = plt.subplots(ncols=2)
-
-#     ax.pcolormesh(x,y, z, cmap='inferno')
-#     ax.set_title("pcolormesh data")
-
-#     ax2.pcolormesh(xi,yi, zi, cmap='inferno')
-#     ax2.set_title("pcolormesh interpolated")
-
-#     plt.show()
-#     return
-''' --------------------------------------------------- '''
