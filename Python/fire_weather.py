@@ -2506,7 +2506,7 @@ def export_NARR_gridMET_loc_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_loc_out
     return
 
 
-def export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_pkl_out_dir, region):
+def export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_pkl_out_dir, region, region_name):
     # ----------------------------------------------------------------------------
     # PARAMETERS:
     #
@@ -2540,50 +2540,69 @@ def export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_pkl
     print('df.shape:', df.shape)
 
     df.reset_index(inplace=True)
+
+    # Entire dataset:
+    print('df lat-lon min max in the dataset:', ((np.min(df.lat), np.min(df.lon)), (np.max(df.lat), np.max(df.lon))))
+    unique_lat = np.unique(df.lat)
+    unique_lon = np.unique(df.lon)
+    n_lat = len(unique_lat)
+    n_lon = len(unique_lon)
+    print('Number of latitudes in OR and WA:', n_lat)
+    print('Number of longitudes in OR and WA:', n_lon)
+    print('Number of locations in OR and WA:', n_lat*n_lon)
+
+    # Select region:
     region_mask = (df['lat'] <= region[1][0]) & (df['lat'] >= region[0][0]) & (df['lon'] <= region[1][1]) & (df['lon'] >= region[0][1])
     cols_to_keep = ['time','lat','lon','H500','H500 Grad X','H500 Grad Y','PMSL','PMSL Grad X','PMSL Grad Y','ERC']
     df_region = df.loc[ region_mask, cols_to_keep ]
 
+    # Remove invalid ERC values if present
+    df_region = df_region.loc[ df_region.ERC >= 0, : ]
+
+    # Region data:
     print('df_region shape:', df_region.shape)
     print('Region:', region)
     print('df_region head:\n', df_region.head().to_string())
     print('df_region tail:\n', df_region.tail().to_string())
 
-    unique_lat = np.unique(df_region.lat)
-    unique_lon = np.unique(df_region.lon)
-    print('Unique latitudes in df_region:', unique_lat)
-    print('Unique longitudes in df_region:', unique_lon)
+    df_region['lat_lon'] = tuple(zip(df_region.lat, df_region.lon))
+    print('df_region head:\n', df_region.head())
+    unique_lat_lon = np.unique(df_region.lat_lon)
+    # print('Unique lat-lon pairs:\n', unique_lat_lon)
+    n_locations = len(unique_lat_lon)
+    print('Number of unique locations in region:', n_locations)
 
+    # This assumes the points are in a grid. However, they may not be
+    # if invalid ERC grid points were removed above:
+    # unique_lat = np.unique(df_region.lat)
+    # unique_lon = np.unique(df_region.lon)
+    # n_lat = len(unique_lat)
+    # n_lon = len(unique_lon)
+    # print('Number of latitudes in region:', n_lat)
+    # print('Number of longitudes in region:', n_lon)
+    # print('Number of locations in region:', n_lat*n_lon)
 
-    # USING df_region.pivot:
+    # Renaming for interpretability:
+    locations = unique_lat_lon
 
-    # Making unique location pairs:
-    locations = [(x,y) for x in unique_lat for y in unique_lon]
-    print('Locations:', locations)
-    df_reg_key = pd.DataFrame(index=range(0,len(locations))) # Make empty so that the locations list can be put into one column 'loc',
-    df_reg_key['loc'] = locations # otherwise pd.DataFrame(data=locations, columns='loc') fails as it tries
-    df_reg_key.index.set_names(names='key', inplace=True) # to split the list's (lat,lon) tuples into two columns.
+    # Creating df region key dataframe with 'loc' column
+    df_reg_key = pd.DataFrame(index=range(n_locations)) # Make empty so that the locations list can be put into one column 'loc',
+    df_reg_key['loc'] = locations # Otherwise pd.DataFrame(data=locations, columns='loc') fails as it tries to split the list's (lat,lon) tuples into two columns.
+    df_reg_key.index.set_names(names='key', inplace=True)
     print('df_reg_key:\n', df_reg_key)
 
-    mapper = {k:v for k,v in zip(locations,range(len(locations)))}
+    mapper = {k:v for k,v in zip(locations,range(n_locations))}
     print('Mapper:', mapper)
-
-    # Merge lat and lon columns in df_region:
-    df_region['lat_lon'] = list(zip(df_region.lat, df_region.lon))
 
     print('df_region:\n', df_region)
 
     # Map locations to integers:
     df_region['loc'] = df_region['lat_lon'].map(mapper)
     print('df_region:\n', df_region)
+    
     # Pivoting:
     df_region_piv = df_region.pivot(index='time', columns='loc', values=['H500','PMSL','H500 Grad X','H500 Grad Y','PMSL Grad X','PMSL Grad Y','ERC'])
     print('Using pivot: df_region_piv:\n', df_region_piv)
-
-    ''' pivot_table conversion isn't needed: '''
-    # # USING pd.pivot_table(df_region):
-    # df_region_pt = pd.pivot_table(df_region, index='time', columns='loc', values=['H500','PMSL','ERC'])
-    # print('Using pivot_table: df_region_pt:\n', df_region_pt)
 
     # Manipulating the multi-level columns into a single level
     multi_level_cols = list(df_region_piv.columns)
@@ -2591,11 +2610,11 @@ def export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_pkl
     df_region_piv.columns = one_level_cols
     print('df_region_piv with one level columns:\n', df_region_piv)
 
-    df_reg_key.to_pickle(NARR_gridMET_reg_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_Random_reg_key.pkl')
-    df_reg_key.to_csv(NARR_gridMET_reg_out_dir + '/csv/Training/' + 'df_NARR_gridMET_Random_reg_key.csv', index=True)
+    df_reg_key.to_pickle(NARR_gridMET_reg_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_key.pkl')
+    df_reg_key.to_csv(NARR_gridMET_reg_out_dir + '/csv/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_key.csv', index=True)
 
-    df_region_piv.to_pickle(NARR_gridMET_reg_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_Random_reg_all_years.pkl')
-    df_region_piv.to_csv(NARR_gridMET_reg_out_dir + '/csv/Training/' + 'df_NARR_gridMET_Random_reg_all_years.csv', index=True)
+    df_region_piv.to_pickle(NARR_gridMET_reg_out_dir + '/pickle/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_all_years.pkl')
+    df_region_piv.to_csv(NARR_gridMET_reg_out_dir + '/csv/Training/' + 'df_NARR_gridMET_'+region_name+'_reg_all_years.csv', index=True)
     return
 
 
@@ -2999,9 +3018,12 @@ def synvar_pickle_to_csv(pickle_in_filename, csv_out_filename, cols_list):
 # ''' Export NARR-gridMET region to RNN '''
 NARR_gridMET_pkl_in_dir = '/home/dp/Documents/FWP/NARR_gridMET/pickle/Training/df_NARR_gridMET_all_years.pkl'
 NARR_gridMET_reg_out_dir = '/home/dp/Documents/FWP/NARR_gridMET/'
-region = ((42, 236), (45, 238))
+region = ((39.2549, 235.294), (46, 244))
+region_name = 'OR'
 #((42.0588, 236.0590), (42.3137, 236.314)) # Kalmiopsis region
-export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_out_dir, region)
+#((42, 236), (45, 238)) # From Oregon-California border south of Kalmiopsis up to Warm Springs reservation (96 grid points)
+#
+export_NARR_gridMET_reg_to_rnn(NARR_gridMET_pkl_in_dir, NARR_gridMET_reg_out_dir, region, region_name)
 # ----------------------------------------
 
 
