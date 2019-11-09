@@ -38,13 +38,18 @@ begin
     ; cdir = "/home/dp/Documents/FWP/NARR/pbl_grib1_exp/temp/nc/"   ; Another 3D directory with different dates
 
     ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of variables: directory covers Jan 1-3
+    
 
+
+
+    ;-------  nc variable -------
+    nc = 4
 
     ;-------  Seagate NARR data directories  -------
-    
-    ; cdir = "/mnt/seagate/NARR/1984/3D/temp/nc/nc4/"                    ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/1984/flx/temp/nc/nc4/"                         ; Seagate  - NARR data - flx - PMSL
-    cdir = "/mnt/seagate/NARR/1984/pbl/temp/nc/nc4/"                         ; Seagate  - NARR data - pbl - CAPE
+
+    cdir = "/mnt/seagate/NARR/1989/3D/temp/nc/"                    ; Seagate  - NARR data - 3D - H500
+    ; cdir := "/mnt/seagate/NARR/1988/flx/temp/nc/"                     ; Seagate  - NARR data - flx - PMSL
+    ; dir = "/mnt/seagate/NARR/1985/pbl/temp/nc/"                ; Seagate  - NARR data - pbl - CAPE
 
     grib_per_csv = 100   ; Set the number of grib/netCDF files to go into one csv file. Max is 131 due to csv row limitations.
 
@@ -57,34 +62,39 @@ begin
     multi                = False  ; or multi var?
 
     ;-------  Grib SYNVAR  -------
+    ; DON'T USE IF CREATING CSV FILES FROM REGRIDDED netCDF FILES
     ; SYNVAR             = "HGT_221_ISBL" ; for grib
     ; SYNVAR             = "PRMSL_221_MSL" ; for grib
     ; SYNVAR             = "CAPE_221_SPDY" ; for grib
 
     ;-------  netCDF SYNVAR  -------
-    ; SYNVAR             = "H500" ; for netCDF    
+    SYNVAR             = "H500" ; for netCDF    
     ; SYNVAR_2           = "TEMP"         ; Temperature, K
     ; SYNVAR_3           = "PVEL"         ; Pressure vertical velocity, Pa/s
     ; SYNVAR_4           = "SPFH"         ; Specific humidity, kg/kg
     ; SYNVAR_5           = "CWTR"         ; Cloud water, kg/kg
 
-    ; SYNVAR             = "PMSL" ; for netCDF
-    SYNVAR             = "CAPE" ; for netCDF
+    ; SYNVAR             := "PMSL" ; for netCDF
+    ; SYNVAR             = "CAPE" ; for netCDF
 
     ;-------  Grib or netCDF SYNABBR  -------
-    ; SYNABBR            = "H500"         ; Geopotential height, gpm
+    SYNABBR            = "H500"         ; Geopotential height, gpm
     ; SYNABBR_2          = "TEMP"         ; Temperature, K
     ; SYNABBR_3          = "PVEL"         ; Pressure vertical velocity, Pa/s
     ; SYNABBR_4          = "SPFH"         ; Specific humidity, kg/kg
     ; SYNABBR_5          = "CWTR"         ; Cloud water, kg/kg
 
-    ; SYNABBR            = "PMSL"
-    SYNABBR            = "CAPE"
+    ; SYNABBR            := "PMSL"
+    ; SYNABBR            = "CAPE"
 
  
+    ; NOT IN USE AT THE MOMENT:
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
     ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
 ;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    nc_dir = "nc" + tostring(nc)
+    cdir_temp = cdir + nc_dir + "/"  ; e.g.     cdir = "/mnt/seagate/NARR/1987/3D/temp/nc/nc1/"
 
     ;---Get grib1 file list or netCDF list, print it
     if(SYNVAR .eq. "HGT_221_ISBL") then ; from grib
@@ -103,7 +113,7 @@ begin
         print("Need to include file type (e.g. 3D, pbl, flx, etc) in if statements")
     end if
     
-    cmd = "cd "+cdir+list_cmd
+    cmd = "cd "+cdir_temp+list_cmd
     print(cmd)
     file_list = systemfunc(cmd)
     print("file_list(0)="+file_list(0))
@@ -111,17 +121,27 @@ begin
     print("nfiles="+nfiles)
     
     ;---Loads all files into f
-    f = addfiles(cdir + file_list, "r")
+    f = addfiles(cdir_temp + file_list, "r")
     
     ;--------------------- Initialize csv file parameters -------------------
-    ;---Set csv file name
-    SYNNAME_CSV = "00_" + SYNABBR + ".csv"
+    ;---Set first csv file name
+    ;---This assumes 800 nc files in each of the nc folders (e.g. nc1, nc2, nc3)
+    ;---and the remaining nc files, typically 500 or so, in nc4. 
+    start_num = (nc-1)*8
+    if(start_num .lt. 10) then
+        start_pref := "0" + tostring(start_num)
+    else
+        start_pref := tostring(start_num)
+    end if
+    SYNNAME_CSV := start_pref + "_" + SYNABBR + ".csv"
+
+
     if(multi) then
         SYNNAME_CSV = "00_" + "MULTI" + ".csv"
     end if
     
     ;---Add directory to csv file name
-    csv_filename = cdir + SYNNAME_CSV
+    csv_filename := cdir_temp + SYNNAME_CSV
             
     ;---Remove current csv file if it exists
     system("rm -rf " + csv_filename)
@@ -130,11 +150,11 @@ begin
     ;---This initiates the first csv file, and is repeated for every file in the loop below.
     if(single) then
         if(netCDF) then
-            SYNABBR_GRAD_X = SYNABBR + " Grad X"
-            SYNABBR_GRAD_Y = SYNABBR + " Grad Y"
-            field_names = (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
+            SYNABBR_GRAD_X := SYNABBR + " Grad X"
+            SYNABBR_GRAD_Y := SYNABBR + " Grad Y"
+            field_names := (/ "time", "lon", "lat", SYNABBR, SYNABBR_GRAD_X, SYNABBR_GRAD_Y /)
         else ; If 
-            field_names = (/ "time", "lon", "lat", SYNABBR /)
+            field_names := (/ "time", "lon", "lat", SYNABBR /)
         end if
     end if
 
@@ -145,43 +165,46 @@ begin
     end if
     
     ;---Merge column names into comma separated string
-    header = [/str_join(field_names,",")/]
+    header := [/str_join(field_names,",")/]
     
     ;---Write header into the csv file
     write_table(csv_filename, "w", header, "%s")
     ;------------------------------------------------------------------------
     
     endfile = nfiles-1
-    c = 0
+    c = 1 ; iterates through csv prefixes
+    i = 0 ; Iterates through nc files
     do i = 0, nfiles-1
 
         ;****************************** CSV file writing ****************************
-        ;---Jumps into this if statement if the first csv file (e.g. 0_H500.csv)
-        ;---is maxed out and will make 1_H500.csv, etc.
-        ;---Making csv_filename suffixes.
+        ;---Jumps into this if statement if the first csv file (e.g. 00_H500.csv)
+        ;---is maxed out. It will proceed to make 01_H500.csv, etc.
+        ;---Making csv_filename prefixes.
         ;---i .eq. (number of grib files to pack into one csv file)
         if(i .gt. 0 .and. i%grib_per_csv .eq. 0) then
-            ;---Update counter variable
-            c = c+1
             print("number of csv files made = "+c)
 
             ;---Set csv file name
             if(single) then
-                if(c .lt. 10) then
-                    ;--- If c is 0 to 9, add a zero prefix
+                pref_num := start_num + c ; e.g. pref_num = 16 + 1 = 17
+                pref := tostring(pref_num) ; convert to string
+                if(pref_num .lt. 10) then
+                    ;--- If pref_num is 1 to 9, add a zero prefix
                     ;--- Resulting names will be 01_H500.csv, 02_H500.csv, etc.
-                    ;--- Makes sorting the csv files easier in import_NARR_csv()
-                    SYNNAME_CSV = tostring(0) + tostring(c) + "_" + SYNABBR + ".csv"
+                    ;--- This makes sorting the csv files easier in import_NARR_csv()
+                    SYNNAME_CSV := "0" + pref + "_" + SYNABBR + ".csv"
                 else
                     ;--- If c is >= 10, no need to add a zero prefix
-                    SYNNAME_CSV = tostring(c) + "_" + SYNABBR + ".csv"
+                    SYNNAME_CSV := pref + "_" + SYNABBR + ".csv"
                 end if
             end if
 
+            ;---This is out of date. If using, need to update to match if(single)
+            ;---loop above.
             if(multi) then
                 if(c .lt. 10) then
                     ;--- If c is 0 to 9, add a zero prefix
-                    ;--- Resulting names will be 01_H500.csv, 02_H500.csv, etc.
+                    ;--- Resulting names will be 00_H500.csv, 01_H500.csv, etc.
                     ;--- Makes sorting the csv files easier in import_NARR_csv()
                     SYNNAME_CSV = tostring(0) + tostring(c) + "_" + "MULTI" + ".csv"
                 else
@@ -191,7 +214,7 @@ begin
             end if
             
             ;---Add directory to csv file name
-            csv_filename = cdir + SYNNAME_CSV
+            csv_filename = cdir_temp + SYNNAME_CSV
             
             ;---Remove current csv file if it exists
             system("rm -rf " + csv_filename)
@@ -219,32 +242,34 @@ begin
     
             ;---Write header into the csv file
             write_table(csv_filename, "w", header, "%s")
-            
+        
+            ;---Update counter
+            c = c+1    
         end if
     
         print("~~~~~~ Currently processing "+file_list(i)+" ~~~~~~")
         
-        ;---Printing "0_H500.csv", etc. outside of if loop above so it prints
+        ;---Printing "00_H500.csv", etc. outside of if loop above so it prints
         ;---on every iteration, not just when the if statement above is true
         print("csv file name: "+SYNNAME_CSV)
 
         ;---Pick the data to write to CSV file
         if(SYNVAR .eq. "HGT_221_ISBL") then
-            v    = f[i]->HGT_221_ISBL ; selects ith file's Geopotential height
+            v    := f[i]->HGT_221_ISBL ; selects ith file's Geopotential height
         elseif(SYNVAR .eq. "PRMSL_221_MSL") then
-            v    = f[i]->PRMSL_221_MSL
+            v    := f[i]->PRMSL_221_MSL
         elseif(SYNVAR .eq. "CAPE_221_SPDY") then
-            v    = f[i]->CAPE_221_SPDY
+            v    := f[i]->CAPE_221_SPDY
         else
             ; If SYNVAR is specified as H500, PMSL or CAPE,
             ; then it came from a netCDF with rectilinear
             ; NARR data, and it contains variables H500,
-            ; H500GradX, and H500GradY. Or the PMSL equivalents.
-            v               = f[i]->$SYNVAR$
-            SYNVAR_GRAD_X   = SYNVAR + "GradX"
-            SYNVAR_GRAD_Y   = SYNVAR + "GradY"
-            dvdx            = f[i]->$SYNVAR_GRAD_X$
-            dvdy            = f[i]->$SYNVAR_GRAD_Y$
+            ; H500GradX, and H500GradY, or the PMSL equivalents.
+            v               := f[i]->$SYNVAR$
+            SYNVAR_GRAD_X   := SYNVAR + "GradX"
+            SYNVAR_GRAD_Y   := SYNVAR + "GradY"
+            dvdx            := f[i]->$SYNVAR_GRAD_X$
+            dvdy            := f[i]->$SYNVAR_GRAD_Y$
             ; print("v:"+v(0,0,0:100))
             if(multi)
                 v2          = f[i]->$SYNVAR_2$
@@ -261,15 +286,15 @@ begin
         
         ;---Decides level based on synoptic variable abbreviation
         if(SYNVAR .eq. "HGT_221_ISBL") then
-            SYNNAME = v(12,:,:)         ; H500 is at level 12
+            SYNNAME := v(12,:,:)         ; H500 is at level 12
         elseif(SYNVAR .eq. "SPF_H_221_ISBL") then
-            SYNNAME = v(12,:,:)         ; SPFH is at level 12
+            SYNNAME := v(12,:,:)         ; SPFH is at level 12
         elseif(SYNVAR .eq. "PRMSL_221_MSL" .or. SYNVAR .eq. "CAPE_221_SPDY") then
-            SYNNAME = v(:,:)            ; CAPE and PMSL have no levels
+            SYNNAME := v(:,:)            ; CAPE and PMSL have no levels
         else ; If SYNVAR = H500, PMSL or CAPE, it came from a netCDF
-            SYNNAME = v(:,:)
-            SYNNAME_GRAD_X = dvdx(:,:)
-            SYNNAME_GRAD_Y = dvdy(:,:)
+            SYNNAME := v(:,:)
+            SYNNAME_GRAD_X := dvdx(:,:)
+            SYNNAME_GRAD_Y := dvdy(:,:)
             if(multi) then
                 SYNNAME_2 = v2(:,:)
                 SYNNAME_3 = v3(:,:)
@@ -278,34 +303,34 @@ begin
             end if
         end if
 
-        x    = f[i]->lon
-        y    = f[i]->lat
-        t    = SYNNAME@initial_time
+        x    := f[i]->lon
+        y    := f[i]->lat
+        t    := SYNNAME@initial_time
 	
-        dims = dimsizes(v)
+        dims := dimsizes(v)
         ;print("SYNVAR dims:*******************************")
         ;print(dims)
 
         ; THIS WAS NEVER DOING ANYTHING
-        x_by_y = dims(0)*dims(1)
+        x_by_y := dims(0)*dims(1)
         ; print("x_by_y product. This should be the length of the 1D arrays:******")
         ; print(x_by_y)
 
         ;---Redimensioning to dims. dims is 277 x 349. t is 1x1.
-        t_conf = conform_dims(x_by_y, t, 0); t_conf = conform_dims(dims, t, 0)
+        t_conf := conform_dims(x_by_y, t, 0); t_conf = conform_dims(dims, t, 0)
         ;print("t_conf:*******************************")
         ;print(t_conf)
 
         ;---Recall that the latitude (y) dimension is the first dimension in
         ;---the H500 nc file
-        y_conf = conform_dims(dims, y, 0)
-        x_conf = conform_dims(dims, x, 1)
+        y_conf := conform_dims(dims, y, 0)
+        x_conf := conform_dims(dims, x, 1)
 
         SYNNAME_OR_WA = SYNNAME
         ;---Assumes gradients are present. If not, this will error.
         if(netCDF) then
-            SYNNAME_GRAD_X_OR_WA = SYNNAME_GRAD_X
-            SYNNAME_GRAD_Y_OR_WA = SYNNAME_GRAD_Y
+            SYNNAME_GRAD_X_OR_WA := SYNNAME_GRAD_X
+            SYNNAME_GRAD_Y_OR_WA := SYNNAME_GRAD_Y
         end if
 
         if(multi) then
@@ -315,14 +340,14 @@ begin
             SYNNAME_5_OR_WA = SYNNAME_5
         end if
 
-        y_OR_WA = y_conf
-        x_OR_WA = x_conf
-        t_OR_WA = t_conf
+        y_OR_WA := y_conf
+        x_OR_WA := x_conf
+        t_OR_WA := t_conf
         
-        SYNNAME_OR_WA_1D   = ndtooned(SYNNAME_OR_WA)
+        SYNNAME_OR_WA_1D   := ndtooned(SYNNAME_OR_WA)
         if(netCDF) then
-            SYNNAME_GRAD_X_OR_WA_1D   = ndtooned(SYNNAME_GRAD_X_OR_WA)
-            SYNNAME_GRAD_Y_OR_WA_1D   = ndtooned(SYNNAME_GRAD_Y_OR_WA)
+            SYNNAME_GRAD_X_OR_WA_1D   := ndtooned(SYNNAME_GRAD_X_OR_WA)
+            SYNNAME_GRAD_Y_OR_WA_1D   := ndtooned(SYNNAME_GRAD_Y_OR_WA)
         end if
         
         if(multi) then
@@ -332,25 +357,25 @@ begin
             SYNNAME_5_OR_WA_1D   = ndtooned(SYNNAME_5_OR_WA)
         end if
 
-        y_OR_WA_1d  = ndtooned(y_OR_WA)
-        x_OR_WA_1d  = ndtooned(x_OR_WA)
-        t_OR_WA_1d  = ndtooned(t_OR_WA)
+        y_OR_WA_1d  := ndtooned(y_OR_WA)
+        x_OR_WA_1d  := ndtooned(x_OR_WA)
+        t_OR_WA_1d  := ndtooned(t_OR_WA)
         ;print("t_OR_WA_1d:")
         ;print(t_OR_WA_1d)
 
         ;---Write data to file
         if(single) then   
             if(netCDF) then ; for H500, PMSL or CAPE
-                alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D/]
+                alist  := [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D/]
             else ; for CAPE
-                alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D/]
+                alist  := [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D/]
             end if
-            format = "%s,%g,%g,%g,%g,%g"
+            format := "%s,%g,%g,%g,%g,%g"
         end if
 
         if(multi) then
-            alist  = [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D, SYNNAME_2_OR_WA_1D, SYNNAME_3_OR_WA_1D, SYNNAME_4_OR_WA_1D, SYNNAME_5_OR_WA_1D /]
-            format = "%s,%g,%g,%g,%g,%g,%g,%g,%g,%g"
+            alist  := [/t_OR_WA_1d, x_OR_WA_1d, y_OR_WA_1d, SYNNAME_OR_WA_1D, SYNNAME_GRAD_X_OR_WA_1D, SYNNAME_GRAD_Y_OR_WA_1D, SYNNAME_2_OR_WA_1D, SYNNAME_3_OR_WA_1D, SYNNAME_4_OR_WA_1D, SYNNAME_5_OR_WA_1D /]
+            format := "%s,%g,%g,%g,%g,%g,%g,%g,%g,%g"
         end if
 
         print("csv directory: "+csv_filename)
@@ -358,7 +383,7 @@ begin
         
 	    print("progress: "+i+"/"+endfile)
 	
-    end do
+    end do ;---do-while makes each csv file
     
 end
 

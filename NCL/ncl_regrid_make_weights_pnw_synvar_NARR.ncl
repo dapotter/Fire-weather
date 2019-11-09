@@ -45,9 +45,10 @@ begin
 
     ;-------  Seagate NARR data directories  -------
 
-    ; cdir = "/mnt/seagate/NARR/1984/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/1984/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
-    cdir = "/mnt/seagate/NARR/1984/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
+    ; REMEMBER TO UPDATE THE YEAR:
+    ; cdir = "/mnt/seagate/NARR/1989/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/1989/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
+    cdir = "/mnt/seagate/NARR/1989/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
     
     ; If exporting one or multiple variables to netCDF files:
     single               = True     ; Processing single var...
