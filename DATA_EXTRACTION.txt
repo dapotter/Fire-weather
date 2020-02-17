@@ -5,14 +5,61 @@ Bash ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Extract all tar files in a directory:
 for file in *.tar; do tar -xvf "$file"; done
 
+Delete all .sfc and .tar files in the current directory and all subfolders:
+Run "find . -type f -iname \*.sfc" first to see a list of files that will be deleted
+find . -type f -iname \*.sfc -delete
+find . -type f -iname \*.tar -delete
+	Where:
+	. tells it to start searching in the current directory
+	-type f look for files only
+	-iname makes search case insensitive
+	-delete deletes all files found
+
+Delete all files having one of multiple extensions:
+find . -type f \( -name \*.sfc -o -name \*tar \) -delete
+	Where:
+	( .. ) Group expression. Needs to be escaped from the shell, hence \( .. \) in the example
+	-o logical or
+
+Delete all files having a certain extension in the current directory but not in subfolders:
+find . -maxdepth 1 -type f -iname \*.tar -delete
+
+
+Move all files (using find and mv) from the current directory and its subdirectories to its corresponding dir:
+3D files: find . -name '*.3D' -exec mv -f '{}' ./3D/ ";"
+flx files: find . -name '*.flx' -exec mv -f '{}' ./flx/ ";"
+pbl files: find . -name '*.pbl' -exec mv -f '{}' ./pbl/ ";"
+
+Move all files (using find and mv) from the current directory and its subdirectories to its corresponding temp folder:
+3D files:	find . -name '*.3D' -exec mv -f '{}' ./3D/temp/ ";"
+flx files:	find . -name '*.flx' -exec mv -f '{}' ./flx/temp/ ";"
+pbl files:	find . -name '*.pbl' -exec mv -f '{}' ./pbl/temp/ ";"
+
+
+
+Move all .3D files into the 3D folder:
+
 Rename all .3D files to have suffix .3D.grib1 for recongition in NCL:
 3D files:   for file in *.3D; do mv "$file" "${file/.3D/.3D.grib1}"; done
 flx files:  for file in *.flx; do mv "$file" "${file/.flx/.flx.grib1}"; done
 pbl files:  for file in *.pbl; do mv "$file" "${file/.pbl/.pbl.grib1}"; done
 sfc files:  for file in *.sfc; do mv "$file" "${file/.sfc/.sfc.grib1}"; done
 
-Doesn't work: Supposed to put all H500 files into one file H500_grb. Instead, it overwrites H500_grb on every loop, and only the last data file gets recorded.
-for file in *_H500.3D; do wgrib -s $file | grep "HGT:500 mb" | wgrib -i -o H500_grb -grib $file; done
+Run regrid operation (check that the file variables are properly set):
+ncl /home/dp/Documents/FWP/NCL/ncl_regrid_make_weights_pnw_synvar_NARR.ncl
+
+Makes folders nc1, nc2, nc3, nc4 and moves 800 nc files into each one. Requires the terminal is open in /nc:
+for i in $(seq 1 4) ; do mkdir nc${i} ; done
+for i in $(seq 1 4) ; do find . -maxdepth 1 -name '*grib1.nc' | sort -k11 | head -n 800 | xargs -I {} mv {} nc${i} ; done
+
+Move all csv files from /nc and its subfolders into /csv. Requires the terminal is open in /nc:
+find . -name "*.csv" -exec mv '{}' "../csv/" ";"
+
+
+gridMET ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Make folders 1985, 1989, ..., 2003 and put each gridMET csv file into the folder, where NCL
+will put each gridMET nc file's csv data into its corresponding year folder:
+for i in $(seq 1985 2003) ; do mkdir ${i} ; done
 
 
 NCL ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
