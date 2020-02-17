@@ -25,7 +25,7 @@ begin
     ;-------------------  NOTE  -------------------
     ; In the directory where the grib files are located
     ; make a folder and name it 'nc'. The netCDF files
-    ; will exported here.
+    ; will be exported here.
 
 
     ;-------  Laptop NARR data directories  -------
@@ -42,39 +42,57 @@ begin
     
     ;cdir = "/home/dp/Documents/FWP/NARR/sfc_grib1_exp/"       ; sfc is a number of vars: directory Jan 1-3 files
 
+    ;---Printing the date and time to terminal
+    start_t = systemfunc("date")
+    print("Start time:"+start_t)
 
     ;-------  Seagate NARR data directories  -------
 
-    ; REMEMBER TO UPDATE THE YEAR:
-    ; cdir = "/mnt/seagate/NARR/1989/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
-    ; cdir = "/mnt/seagate/NARR/1989/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
-    cdir = "/mnt/seagate/NARR/1989/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
+    ; REMEMBER TO UPDATE THE YEAR FOLDER:
+    ; cdir = "/mnt/seagate/NARR/2007/3D/temp/"                     ; Seagate  - NARR data - 3D - H500
+    ; cdir = "/mnt/seagate/NARR/2007/flx/temp/"                    ; Seagate  - NARR data - flx - PMSL
+    ; cdir = "/mnt/seagate/NARR/2007/pbl/temp/"                    ; Seagate  - NARR data - pbl - CAPE
     
+    yr = 1989;
+    do yr = 1989, 1991
+        cdir = "/media/dp/seagate_5tb/NARR/"+yr+"/3D/temp/"       ; Seagate 5TB  - NARR data - 3D - H500
+        change_dir_cmd = "cd "+cdir
+        func = systemfunc(change_dir_cmd)
+        file_list = systemfunc("ls")
+        print(file_list)
+    end do
+    end
+
+    /;
+    ; cdir = "/media/dp/seagate_5tb/NARR/1989/3D/temp/"       ; Seagate 5TB  - NARR data - 3D - H500
+    ; cdir = "/media/dp/seagate_5tb/NARR/2008/flx/temp/"    ; Seagate 5TB  - NARR data - flx - PMSL
+    ; cdir = "/media/dp/seagate_5tb/NARR/2008/pbl/temp/"    ; Seagate 5TB  - NARR data - pbl - CAPE
+
     ; If exporting one or multiple variables to netCDF files:
     single               = True     ; Processing single var...
     multi                = False    ; or multi var?
 
-    ; SYNVAR               = "HGT_221_ISBL"  ; This is always set
+    SYNVAR               = "HGT_221_ISBL"  ; This is always set
     ; SYNVAR_2             = "TMP_221_ISBL"  ; SYNVAR_2 to SYNVAR_5 only matter if multi = True
     ; SYNVAR_3             = "V_VEL_221_ISBL"
     ; SYNVAR_4             = "SPF_H_221_ISBL"
     ; SYNVAR_5             = "CLWMR_221_ISBL"
 
     ; SYNVAR             = "PRMSL_221_MSL"
-    SYNVAR             = "CAPE_221_SPDY"
+    ; SYNVAR             = "CAPE_221_SPDY"
 
 
     lvl                    = 500            ; arbitrary pressure level for H500
 
 
-    ; SYNABBR              = "H500"         ; Geopotential height, gpm
+    SYNABBR              = "H500"         ; Geopotential height, gpm
     ; SYNABBR_2            = "TEMP"         ; Temperature, K
     ; SYNABBR_3            = "PVEL"         ; Pressure vertical velocity, Pa/s
     ; SYNABBR_4            = "SPFH"         ; Specific humidity, kg/kg
     ; SYNABBR_5            = "CWTR"         ; Cloud water, kg/kg
     
     ; SYNABBR            = "PMSL"
-    SYNABBR            = "CAPE"
+    ; SYNABBR            = "CAPE"
  
     ; csv_type   = "multiple"     ; Each grib1 file in cdir is written to its own csv file
     ; csv_type   = "single"      ; All grib1 files in cdir are collectively written to one csv
@@ -105,11 +123,12 @@ begin
 
     print(cmd)
     file_list = systemfunc(cmd)
-    print("*********************************************file_list(0)="+file_list(0))
+    print("First file in cdir (file_list(0))="+file_list(0))
     nfiles = dimsizes(file_list)
     print("nfiles="+nfiles)
     
     ;---Loads all files into f
+    print("Loading all "+nfiles+" files from cdir into f. Loading 2920 files takes one to two hours...")
     f = addfiles(cdir + file_list, "r")
 
     ;---Specify directories for netCDF export and then import for plotting
@@ -196,10 +215,17 @@ begin
     ;---For example, it could be just the area of the USA.
     ;---Create rectilinear coordinates; monotonically increasing
 
-        nlat  = 52
-        nlon  = 52
-        lat   = fspan(  39.0,  52.0, nlat)
-        lon   = fspan( 233.0, 246.0, nlon)
+    ;---OLD NARR Boundary:
+        ; nlat  = 52
+        ; nlon  = 52
+        ; lat   = fspan(  39.0,  52.0, nlat) ; New: (36.0, 62.0) ; Google maps: (36.0, 62.0)
+        ; lon   = fspan( 233.0, 246.0, nlon) ; New: (223.0, 249.0) ; Google maps: Subtract 360 deg: (-137, -111)
+
+    ;---NEW NARR Boundary:
+        nlat  = 104
+        nlon  = 104
+        lat   = fspan(  36.0,  62.0, nlat)
+        lon   = fspan( 223.0, 249.0, nlon)
 
     ;---For netCDF
 
@@ -215,10 +241,10 @@ begin
         ;lev&lev       = lev
 
         if(i .eq. 0) then
-        ;--- Only create the ESMF weights file once during the
-        ;--- first file processing
+        ;---Only create the ESMF weights file once during the
+        ;---first file processing
         ;---Create regrid options
-
+            print("************************ Opt creation loop start")
             InterpMethod = "bilinear"                           ; "bilinear", "conserve"
             Opt                = True
             Opt@SrcTitle       = "NARR grid"   ; optional
@@ -250,6 +276,7 @@ begin
             Opt@RemoveDstFile  = False; True
             Opt@RemoveWgtFile  = False; True
             Opt@NoPETLog       = False; True                  ; 6.2.1 onward
+            print("************************ Opt creation loop end")
         end if
 
     ;---Perform the regrid: NARR ==> rectilinear (_reclin)
@@ -498,11 +525,18 @@ begin
         wks5 = gsn_open_wks("png", SYNABBR_5+"_OR_WA")
     end if
 
-    ;---Specify lon lat subset:
-    lat_min =   39
-    lat_max =   52
-    lon_min =   233;-114
-    lon_max =   246;-127
+    ;---OLD: Specify lon lat subset:
+    ; print("***** WARNING: USING SMALL NARR BOUNDARIES *****")
+    ; lat_min =   39
+    ; lat_max =   52
+    ; lon_min =   233;-114
+    ; lon_max =   246;-127
+
+    ;---NEW: Specify lon lat subset:
+    lat_min =   36 ; 39
+    lat_max =   62 ; 52
+    lon_min =   223; 233;-114
+    lon_max =   249; 246;-127
 
     ;---H500 or PMSL or CAPE:
     x_reclin_sub  := x_reclin({lat_min:lat_max},{lon_min:lon_max})
@@ -623,6 +657,10 @@ begin
     draw(plt)
     frame(wks)
 
+    ;---Printing the date and time to terminal
+    print("Start time:"+start_t)
+    end_t = systemfunc("date")
+    print("End time:"+end_t)
 
 
 ; BELOW SECTION IS COMMENTED OUT TO AVOID RUNNING. IT WORKS, UNCOMMENT TO RUN:
@@ -745,3 +783,4 @@ begin
 ; ;****************************************************************************************
 
 end
+;/
